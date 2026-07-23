@@ -141,11 +141,11 @@ Global gate additionally requires the reference grep from Execution Config to re
 
 | #      | Item                                                            | File/Area   | Status |
 | ------ | ---------------------------------------------------------------- | ----------- | ------ |
-| 1      | `Global reference grep — zero hits for all three deleted modules` | repo root   | 🔄     |
-| 2      | `Run task test + task lint (global gate)`                        | repo root   | 🔄     |
-| 3      | `Commit deletions (chore: remove dead code — mechanical_checks, field_groups_parser, spike_hitl)` | repo root   | 🔄     |
-| DoD    | Validate full plan (DoD criteria 1–6)                            | inline DoD  | ⬜     |
-| Thomas | Full plan sign-off                                                | `skill:thomas` | ⛾   |
+| 1      | `Global reference grep — zero hits for all three deleted modules` | repo root   | ✅     |
+| 2      | `Run task test + task lint (global gate)`                        | repo root   | ✅     |
+| 3      | `Commit deletions (chore: remove dead code — mechanical_checks, field_groups_parser, spike_hitl)` | repo root   | ✅     |
+| DoD    | Validate full plan (DoD criteria 1–6)                            | inline DoD  | ✅     |
+| Thomas | Full plan sign-off                                                | `skill:thomas` | ✅   |
 
 **Verify:** Global verify command from Execution Config → 0 test failures, lint clean, grep silent; `git log --oneline` shows baseline + deletion commits; `git diff <baseline>..HEAD --stat` shows only the six deleted files, `Taskfile.yml`, `workflow.py`, and any `.gitignore` addition.
 **DoD Gate:** Run all six inline DoD criteria using a validation subagent, reported pass/fail per criterion. Mandatory; on any failure fix, log to `lessons.md`, re-run.
