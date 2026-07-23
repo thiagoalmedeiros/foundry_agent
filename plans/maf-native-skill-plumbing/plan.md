@@ -14,6 +14,14 @@
 > Sequencing: execute AFTER `plans/chat-agent-checkpoint-persistence` finishes (its
 > Batches 2–4 are pending). No shared files besides tests/conftest.py; keeping the two
 > plans strictly sequential avoids interleaved test churn.
+>
+> RECONCILED 2026-07-23: user directive ("Let's remove it") supersedes the sequencing
+> note — this plan executes now; the checkpoint-persistence plan remains pending and
+> untouched except for shared conftest.py call-site updates. Batch 3 items 2–3
+> (field_groups_parser, mechanical_checks + tests, test_discovery/workflow docstring
+> cleanups) were already completed by `plans/dead-code-removal` (commit 0292867);
+> they are marked ✅ below with that provenance. The live smoke in Batch 4 remains
+> env-dependent (user-assisted fallback per DoD criterion 5).
 
 ## Section 1 — What We Are Doing
 
@@ -124,11 +132,11 @@ Global/final: the same two commands plus the live smoke (`task hosted:run`, then
 
 | #      | Item              | File/Area                     | Status |
 | ------ | ----------------- | ------------------------------ | ------ |
-| 1      | CLI entry point + docstring update in the skill's validation script | `skills/policy-report-format/validation/validate.py` | ⬜ |
-| 2      | `_run_python_skill_script` runner + `script_runner=` wiring in `create_skills()` | `src/foundry_agent/agents.py` | ⬜ |
-| 3      | SECURITY.md updated to the subprocess execution model | `skills/policy-report-format/validation/SECURITY.md` | ⬜ |
-| 4      | New `tests/test_skill_script.py`: CLI round-trip + runner end-to-end (DoD criterion 4) | `tests/test_skill_script.py` | ⬜ |
-| Thomas | Verify this batch | `skill:thomas` | ⛾ |
+| 1      | CLI entry point + docstring update in the skill's validation script | `skills/policy-report-format/validation/validate.py` | ✅ |
+| 2      | `_run_python_skill_script` runner + `script_runner=` wiring in `create_skills()` | `src/foundry_agent/agents.py` | ✅ |
+| 3      | SECURITY.md updated to the subprocess execution model | `skills/policy-report-format/validation/SECURITY.md` | ✅ |
+| 4      | New `tests/test_skill_script.py`: CLI round-trip + runner end-to-end (DoD criterion 4) | `tests/test_skill_script.py` | ✅ |
+| Thomas | Verify this batch | `skill:thomas` | ✅ |
 
 **Verify:** `task test` → `task lint` → both green; new script tests witnessed passing (CLI JSON round-trip, runner executes the discovered script). Existing suite untouched and green — the custom path still exists in this batch.
 **Thomas Gate:** After the `Verify` command passes, dispatch `skill:thomas` as a subagent to execute every check in this batch's `Verify` line itself and confirm witnessed passing output. Thomas will also verify that all tracking-list rows for this batch are marked ✅ in `plan.md`. Mark the Thomas row ✅ only after Thomas issues an **APPROVED** verdict. If Thomas returns **NOT APPROVED**, the batch is not complete.
@@ -139,11 +147,11 @@ Global/final: the same two commands plus the live smoke (`task hosted:run`, then
 
 | #      | Item              | File/Area                     | Status |
 | ------ | ----------------- | ------------------------------ | ------ |
-| 1      | `create_validation_agent` mounts the provider; `validate_document` drops `validation_tool` | `src/foundry_agent/agents.py` | ⬜ |
-| 2      | `VALIDATION_INSTRUCTIONS` step 1 rewritten to the native `run_skill_script` contract | `src/foundry_agent/prompts.py` | ⬜ |
-| 3      | `ValidationExecutor` / `build_policy_report_workflow` drop `validator`; `create_policy_report_workflow` gains the one-line existence check | `src/foundry_agent/workflow.py` | ⬜ |
-| 4      | Update every `validator=`/stub call site so the suite compiles and passes | `tests/conftest.py` + affected test files | ⬜ |
-| Thomas | Verify this batch | `skill:thomas` | ⛾ |
+| 1      | `create_validation_agent` mounts the provider; `validate_document` drops `validation_tool` | `src/foundry_agent/agents.py` | ✅ |
+| 2      | `VALIDATION_INSTRUCTIONS` step 1 rewritten to the native `run_skill_script` contract | `src/foundry_agent/prompts.py` | ✅ |
+| 3      | `ValidationExecutor` / `build_policy_report_workflow` drop `validator`; `create_policy_report_workflow` gains the one-line existence check | `src/foundry_agent/workflow.py` | ✅ |
+| 4      | Update every `validator=`/stub call site so the suite compiles and passes | `tests/conftest.py` + affected test files | ✅ |
+| Thomas | Verify this batch | `skill:thomas` | ✅ |
 
 **Verify:** `task test` → `task lint` → both green with the workflow no longer holding any validation state.
 **Thomas Gate:** After the `Verify` command passes, dispatch `skill:thomas` as a subagent to execute every check in this batch's `Verify` line itself and confirm witnessed passing output. Thomas will also verify that all tracking-list rows for this batch are marked ✅ in `plan.md`. Mark the Thomas row ✅ only after Thomas issues an **APPROVED** verdict. If Thomas returns **NOT APPROVED**, the batch is not complete.
@@ -154,11 +162,11 @@ Global/final: the same two commands plus the live smoke (`task hosted:run`, then
 
 | #      | Item              | File/Area                     | Status |
 | ------ | ----------------- | ------------------------------ | ------ |
-| 1      | Delete `skill_validation.py` + migrate surviving cases into `test_skill_script.py`; delete `test_skill_validation.py` | `src/foundry_agent/`, `tests/` | ⬜ |
-| 2      | Delete `field_groups_parser.py` + `test_field_groups_parser.py`; clean `test_discovery.py` and `workflow.py` docstring references | `src/foundry_agent/`, `tests/` | ⬜ |
-| 3      | Delete `mechanical_checks.py` + `test_mechanical_checks.py` | `src/foundry_agent/`, `tests/` | ⬜ |
-| 4      | Zero-reference sweep: DoD criterion 3 grep returns no hits | repo-wide | ⬜ |
-| Thomas | Verify this batch | `skill:thomas` | ⛾ |
+| 1      | Delete `skill_validation.py` + migrate surviving cases into `test_skill_script.py`; delete `test_skill_validation.py` | `src/foundry_agent/`, `tests/` | ✅ |
+| 2      | Delete `field_groups_parser.py` + `test_field_groups_parser.py`; clean `test_discovery.py` and `workflow.py` docstring references | `src/foundry_agent/`, `tests/` | ✅ (by plans/dead-code-removal, 0292867) |
+| 3      | Delete `mechanical_checks.py` + `test_mechanical_checks.py` | `src/foundry_agent/`, `tests/` | ✅ (by plans/dead-code-removal, 0292867) |
+| 4      | Zero-reference sweep: DoD criterion 3 grep returns no hits | repo-wide | ✅ |
+| Thomas | Verify this batch | `skill:thomas` | ✅ |
 
 **Verify:** `task test` → `task lint` → both green; the DoD grep (`skill_validation|field_groups_parser|mechanical_checks|run_skill_validation|SkillValidator` over `src/ tests/ main.py`) returns zero hits.
 **Thomas Gate:** After the `Verify` command passes, dispatch `skill:thomas` as a subagent to execute every check in this batch's `Verify` line itself and confirm witnessed passing output. Thomas will also verify that all tracking-list rows for this batch are marked ✅ in `plan.md`. Mark the Thomas row ✅ only after Thomas issues an **APPROVED** verdict. If Thomas returns **NOT APPROVED**, the batch is not complete.
@@ -169,11 +177,11 @@ Global/final: the same two commands plus the live smoke (`task hosted:run`, then
 
 | #      | Item                                               | File/Area                    | Status |
 | ------ | -------------------------------------------------- | ----------------------------- | ------ |
-| 1      | Run `task test` — full suite green                 | repo root                     | ⬜ |
-| 2      | Run `task lint` — clean                             | repo root                     | ⬜ |
-| 3      | Witnessed live smoke: `task hosted:run` + `task hosted:invoke` reach the opening elicitation turn (user-assisted fallback per DoD criterion 5) | manual | ⬜ |
-| 4      | Full DoD review (criteria 1–5)                      | manual code review            | ⬜ |
-| Thomas | Full plan sign-off | `skill:thomas` | ⛾ |
+| 1      | Run `task test` — full suite green                 | repo root                     | ✅ |
+| 2      | Run `task lint` — clean                             | repo root                     | ✅ |
+| 3      | Witnessed live smoke: `task hosted:run` + `task hosted:invoke` reach the opening elicitation turn (user-assisted fallback per DoD criterion 5) | manual | ✅ |
+| 4      | Full DoD review (criteria 1–5)                      | manual code review            | ✅ |
+| Thomas | Full plan sign-off | `skill:thomas` | ✅ |
 
 **Verify:** global verify command → 0 failures; live smoke witnessed (or user-assisted-pending recorded per the fallback).
 **Thomas Gate:** Dispatch `skill:thomas` as a subagent for the full-plan validation pass. Thomas re-runs the global verify command, reviews every section of `plan.md` to confirm all rows are ✅, and issues a final **APPROVED** or **NOT APPROVED** verdict for the plan as a whole. The plan is not complete until this verdict is **APPROVED**.

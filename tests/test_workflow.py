@@ -2,9 +2,9 @@
 
 Every chat client is a stub — the tests drive the real workflow graph
 (including the HITL pauses and the validation cycle) without live model calls.
-The skill's real validation script is bound in (via conftest's ``VALIDATOR``),
-so these tests exercise the actual ``run_skill_validation`` binding path, not
-a fake.
+The skill's deterministic validation script is no longer wired through the
+workflow: the validation agent runs it via its mounted skill provider
+(``run_skill_script``), exercised directly in ``test_skill_script.py``.
 """
 
 from foundry_agent.agents import (
@@ -36,7 +36,6 @@ from tests.conftest import (
     STUB_DOCUMENT,
     TWO_GAP_REPORT,
     UNRESOLVED_TURN,
-    VALIDATOR,
 )
 
 
@@ -61,7 +60,6 @@ def _workflow(
         elicitation_agent=create_elicitation_agent(made["elicit"]),
         validation_agent=create_validation_agent(made["validation"]),
         authoring_agent=create_authoring_agent(make_stub_client(None, text=STUB_DOCUMENT)),
-        validator=VALIDATOR,
         field_groups=GROUPS,
     )
 

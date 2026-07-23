@@ -15,7 +15,6 @@ from typing import Any
 import pytest
 from agent_framework import ChatResponse, Message
 
-from foundry_agent.agents import FORMAT_SKILL_DIR
 from foundry_agent.models import (
     AttributeStatus,
     CapturedValue,
@@ -27,18 +26,8 @@ from foundry_agent.models import (
     GapReport,
     ValidationResult,
 )
-from foundry_agent.skill_validation import load_skill_validator
-
 #: The sample assessment a user realistically pastes or uploads mid-conversation.
 INPUT_FILE = Path(__file__).resolve().parent / "fixtures" / "policy-input-file.md"
-
-#: The real skill's validation script, loaded once. Bound fresh per test via
-#: ``bind_skill_validation_tool`` where a test needs to; workflow-building
-#: tests pass this straight to ``build_policy_report_workflow(validator=...)``.
-#: Safe and cheap to share — pure, stateless, no test mutates it — and using
-#: the real script (not a fake) proves the binding path actually works, the
-#: same thing Batch 4's witnessed smokes confirmed by hand.
-VALIDATOR = load_skill_validator(FORMAT_SKILL_DIR)
 
 GROUPS = FieldGroups(
     groups=[

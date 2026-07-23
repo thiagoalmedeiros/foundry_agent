@@ -4,9 +4,11 @@ The elicitation agent keeps MAF progressive disclosure (its multi-turn session
 amortizes what it loads). The stateless agents — gap analysis, validation,
 authoring — carry a per-agent reference pack inlined verbatim from the same
 skill files at construction time (the predecessor project's recorded
-progressive-disclosure evaluation led here). These tests pin both mounts, that
-each pack is tailored and verbatim from the live files, and that no agent
-restates domain knowledge in code.
+progressive-disclosure evaluation led here). Validation additionally mounts
+the format skill's provider — not for disclosure, but so the native
+``run_skill_script`` tool can execute the skill's own validation script.
+These tests pin the mounts, that each pack is tailored and verbatim from the
+live files, and that no agent restates domain knowledge in code.
 """
 
 import pytest
@@ -86,10 +88,12 @@ async def test_stateless_agents_carry_their_pack_verbatim(make_stub_client, fact
 
 
 @pytest.mark.parametrize(
-    ("factory", "pack"), STATELESS, ids=["gap-analysis", "validation", "authoring"]
+    "factory",
+    [create_gap_analysis_agent, create_authoring_agent],
+    ids=["gap-analysis", "authoring"],
 )
-async def test_stateless_agents_no_longer_carry_skill_tools(make_stub_client, factory, pack):
-    """The tool loop is gone for stateless agents — that was the measured cost."""
+async def test_pack_only_agents_carry_no_skill_tools(make_stub_client, factory):
+    """The disclosure tool loop is gone for gap analysis and authoring — the measured cost."""
     client = make_stub_client(GROUPS)
 
     await _run_once(factory(client))
@@ -99,6 +103,17 @@ async def test_stateless_agents_no_longer_carry_skill_tools(make_stub_client, fa
     }
     assert "load_skill" not in tool_names
     assert "read_skill_resource" not in tool_names
+
+
+async def test_the_validation_agent_mounts_the_provider_for_its_script(make_stub_client):
+    """Validation keeps its inline pack but mounts the format skill so the
+    native ``run_skill_script`` tool can execute ``validation/validate.py``."""
+    client = make_stub_client(GROUPS)
+
+    await _run_once(create_validation_agent(client))
+
+    tool_names = {getattr(tool, "name", str(tool)) for tool in client.options["tools"]}
+    assert "run_skill_script" in tool_names
 
 
 def test_packs_are_tailored_not_one_blob():

@@ -16,27 +16,31 @@ population and inference guidance, the canonical template — lives in the
   a run's full-rate tokens, which is why disclosure was retired for them — the
   evaluation and decision are recorded in
   ``kb/architecture-and-design/poc-progressive-disclosure-verdict.md``.
-- The **validation** agent additionally carries one domain-neutral function
-  tool (``run_skill_validation``, bound per run by
-  :mod:`~foundry_agent.skill_validation`) that runs the loaded skill's OWN
-  deterministic validation script — the workflow never encodes those rules
-  itself.
+- The **validation** agent additionally mounts the format skill's provider so
+  the native ``run_skill_script`` tool can execute the loaded skill's OWN
+  deterministic validation script (``validation/validate.py``, run as a
+  subprocess by :func:`_run_python_skill_script`) — the workflow never encodes
+  those rules itself.
 
 Either way the content is repository skill files, not code: re-clustering a
 field group or rewording population guidance changes this workflow's behaviour
 with no change here.
 """
 
+import asyncio
+import json
 import logging
 import os
-from collections.abc import Callable
+import sys
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from agent_framework import (
     Agent,
     AgentSession,
     ChatOptions,
+    FileSkill,
+    FileSkillScript,
     FileSkillsSource,
     SkillsProvider,
     SupportsChatGetResponse,
@@ -93,16 +97,76 @@ def _cache_key(stage: str) -> str:
     return f"{_CACHE_KEY_PREFIX}:{stage}"
 
 
+#: Hard wall-clock cap on one skill-script subprocess. The validation script is
+#: pure and finishes in milliseconds; the cap only bounds a hung interpreter.
+_SCRIPT_TIMEOUT_SECONDS = float(os.environ.get("SKILL_SCRIPT_TIMEOUT_SECONDS", "30"))
+
+
+def _script_argv(args: dict[str, Any] | list[Any] | None) -> list[str]:
+    """Flatten the model-supplied tool arguments into subprocess argv strings.
+
+    The tool contract asks for a list of JSON strings, but a model may send a
+    dict or already-parsed JSON values; every non-string is re-serialized so
+    the script always receives JSON text, positionally, in the order given.
+    """
+    values = list(args.values()) if isinstance(args, dict) else list(args or [])
+    return [value if isinstance(value, str) else json.dumps(value) for value in values]
+
+
+async def _run_python_skill_script(
+    skill: FileSkill, script: FileSkillScript, args: dict[str, Any] | list[Any] | None = None
+) -> Any:
+    """Run a file-based skill script as a subprocess — the framework ships no runner.
+
+    Satisfies the :class:`agent_framework.SkillScriptRunner` protocol.
+    Executes ONLY scripts discovered inside this repository's ``skills/`` tree
+    (see the mounted skill's ``validation/SECURITY.md`` for the trust stance).
+    Errors come back as strings, matching the provider's own error style, so
+    the calling agent can correct its arguments and retry instead of crashing
+    the run.
+    """
+    path = Path(script.full_path)
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        str(path),
+        *_script_argv(args),
+        cwd=str(path.parent),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(), timeout=_SCRIPT_TIMEOUT_SECONDS
+        )
+    except TimeoutError:
+        process.kill()
+        return (
+            f"Error: script '{script.name}' timed out after {_SCRIPT_TIMEOUT_SECONDS:g}s."
+        )
+    if process.returncode != 0:
+        detail = stderr.decode(errors="replace").strip() or f"exit code {process.returncode}"
+        return f"Error: script '{script.name}' failed — {detail}"
+    output = stdout.decode(errors="replace").strip()
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        return output
+
+
 def create_skills(paths: list[Path]) -> SkillsProvider:
     """Mount the policy skills an agent may load, via MAF progressive disclosure.
 
     The provider advertises each skill's name and description in the system
-    prompt and offers ``load_skill`` / ``read_skill_resource`` tools for
-    on-demand loading, so only the references an agent actually needs enter its
-    context. Approvals are disabled — these skills ship in this repository.
+    prompt and offers ``load_skill`` / ``read_skill_resource`` /
+    ``run_skill_script`` tools, so only the references an agent actually needs
+    enter its context and a skill's own scripts (e.g. the format skill's
+    ``validate.py``) run through :func:`_run_python_skill_script`. Approvals
+    are disabled — these skills ship in this repository.
     """
     return SkillsProvider(
-        FileSkillsSource([str(path) for path in paths]),
+        FileSkillsSource(
+            [str(path) for path in paths], script_runner=_run_python_skill_script
+        ),
         source_id="policy_skills",
         disable_load_skill_approval=True,
         disable_read_skill_resource_approval=True,
@@ -171,9 +235,10 @@ def create_chat_client() -> OpenAIChatClient:
     # unlimited max_function_calls per agent.run() call. Each skill resource read
     # returns a whole reference file with no caching, and each additional tool
     # round resends the growing conversation. The elicitation agent carries skill
-    # tools and the validation agent carries the run_skill_validation tool (the
-    # stateless gap-analysis/authoring agents inline their packs instead), but
-    # these caps keep every agent's worst-case tool-loop cost per call bounded.
+    # tools and the validation agent runs the skill's validation script through
+    # run_skill_script (the stateless gap-analysis/authoring agents inline their
+    # packs instead), but these caps keep every agent's worst-case tool-loop
+    # cost per call bounded.
     client.function_invocation_configuration["max_iterations"] = 8
     client.function_invocation_configuration["max_function_calls"] = 12
     return client
@@ -229,13 +294,15 @@ def create_elicitation_agent(
     )
 
 
-def create_validation_agent(client: SupportsChatGetResponse) -> Agent:
-    """Create the Validation agent with its reference pack inlined.
+def create_validation_agent(
+    client: SupportsChatGetResponse, skills: SkillsProvider | None = None
+) -> Agent:
+    """Create the Validation agent: reference pack inlined, format skill mounted.
 
-    Carries no tool at construction time — the ``run_skill_validation`` tool
-    depends on the run's own discovered groups (unknown until Discovery has
-    run), so it is bound fresh per call and passed via
-    :func:`validate_document`'s ``ChatOptions(tools=[...])`` instead.
+    The provider is mounted for its native ``run_skill_script`` tool — the
+    agent executes the skill's own ``validation/validate.py`` with this run's
+    captured values and groups (both already in its prompt). The inline
+    reference pack stays: the mount serves the script, not disclosure.
     """
     return Agent(
         client,
@@ -243,6 +310,7 @@ def create_validation_agent(client: SupportsChatGetResponse) -> Agent:
         name="validation",
         description="Runs the skill's own validation script, then judges adequacy "
         "across the whole document.",
+        context_providers=[skills or create_skills([FORMAT_SKILL_DIR])],
     )
 
 
@@ -497,15 +565,14 @@ async def validate_document(
     agent: Agent,
     candidate_text: str,
     groups: list[FieldGroup],
-    validation_tool: Callable[[dict[str, str]], list[str]],
     usage: RunUsage | None = None,
 ) -> ValidationResult:
     """Judge the whole document: the skill's own script for presence, the agent for adequacy.
 
-    ``validation_tool`` is bound to this run's discovered groups by
-    :func:`~foundry_agent.skill_validation.bind_skill_validation_tool` and
-    passed per-call rather than baked into the agent at construction — the
-    workflow, not this function, owns the skill's validation script.
+    The deterministic check arrives through the agent's mounted skill
+    provider (``run_skill_script`` on the format skill's
+    ``validation/validate.py``); the prompt carries everything the agent
+    needs to pass — the group scope and the candidate content.
     """
     prompt = (
         f"{_all_groups_scope(groups)}\n\n"
@@ -515,7 +582,6 @@ async def validate_document(
         prompt,
         options=ChatOptions(
             response_format=ValidationResult,
-            tools=[validation_tool],
             prompt_cache_key=_cache_key("validation"),
         ),
     )

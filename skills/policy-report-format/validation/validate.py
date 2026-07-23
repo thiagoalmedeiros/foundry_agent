@@ -1,4 +1,4 @@
-"""Policy Report validation — SKILL content, executed BY the workflow.
+"""Policy Report validation — SKILL content, executed via ``run_skill_script``.
 
 This module carries the *policy-report* domain's deterministic acceptance
 rules: which attributes are required (including the conditional ones), which
@@ -6,16 +6,22 @@ placeholder values do not count, the title word cap, and the policy-type enum.
 It lives in the skill — not in ``src/foundry_agent`` — so the workflow stays
 domain-free: swap the loaded skill and its own ``validate`` travels with it.
 
-Contract: a single module-level :func:`validate` that the workflow's
-domain-neutral ``run_skill_validation`` tool imports and calls. It is pure — no
-I/O, no global state, standard library only — and knows nothing about the
-Agent Framework.
+Contract: the Validation agent runs this file through the skill provider's
+native ``run_skill_script`` tool, which executes it as a subprocess::
 
-Security: the workflow imports and executes this file. That is acceptable ONLY
-because skills ship inside this repository and are trusted — the same stance
-that disables ``SkillsProvider`` tool approvals for in-repo skills. See
-``SECURITY.md`` in this directory before mounting any skill from an untrusted
-source.
+    python validate.py '<captured_values JSON>' '<groups JSON>'
+
+stdout is a JSON array of the failing attribute ids (exit 0 — validation
+findings are data, not process failure); malformed arguments exit 2 with a
+one-line error on stderr so the calling agent can retry with corrected
+arguments. The pure :func:`validate` stays importable and knows nothing about
+the Agent Framework; ``__main__`` only wraps it.
+
+Security: the framework's script runner executes this file as a subprocess.
+That is acceptable ONLY because skills ship inside this repository and are
+trusted — the same stance that disables ``SkillsProvider`` tool approvals for
+in-repo skills. See ``SECURITY.md`` in this directory before mounting any
+skill from an untrusted source.
 """
 
 #: Values that fill a slot without informing (definitions.md "Placeholder").
@@ -113,3 +119,21 @@ def _order(attribute_id: str) -> tuple[int, str]:
     """Sort key ordering ``PA2`` before ``PA10`` (numeric, not lexical)."""
     suffix = attribute_id.removeprefix("PA")
     return (int(suffix), "") if suffix.isdigit() else (2**31, attribute_id)
+
+
+if __name__ == "__main__":
+    import json
+    import sys
+
+    try:
+        captured_values = json.loads(sys.argv[1])
+        groups = json.loads(sys.argv[2])
+        if not isinstance(captured_values, dict) or not isinstance(groups, list):
+            raise ValueError("captured_values must be a JSON object and groups a JSON array")
+    except (IndexError, ValueError) as error:
+        print(
+            f"usage: validate.py '<captured_values JSON object>' '<groups JSON array>' — {error}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    print(json.dumps(validate(captured_values, groups)))

@@ -29,7 +29,6 @@ from tests.conftest import (
     OPEN_TURN,
     STUB_DOCUMENT,
     TWO_GAP_REPORT,
-    VALIDATOR,
 )
 
 
@@ -81,7 +80,6 @@ def _agent(
             elicitation_agent=create_elicitation_agent(make_elicitation_client(*turns)),
             validation_agent=create_validation_agent(validation_client),
             authoring_agent=create_authoring_agent(make_stub_client(None, text=STUB_DOCUMENT)),
-            validator=VALIDATOR,
             field_groups=GROUPS,
         )
 

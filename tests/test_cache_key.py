@@ -16,14 +16,12 @@ from foundry_agent.agents import (
     open_elicitation_conversation,
     validate_document,
 )
-from foundry_agent.skill_validation import bind_skill_validation_tool
 from tests.conftest import (
     COMPLETE_VALIDATION,
     GROUPS,
     OPEN_TURN,
     STUB_DOCUMENT,
     TWO_GAP_REPORT,
-    VALIDATOR,
 )
 
 
@@ -48,9 +46,8 @@ async def test_elicitation_requests_carry_the_elicitation_key(make_stub_client):
 
 async def test_validation_requests_carry_the_validation_key(make_stub_client):
     client = make_stub_client(COMPLETE_VALIDATION)
-    tool = bind_skill_validation_tool(VALIDATOR, [g.model_dump() for g in GROUPS.groups])
 
-    await validate_document(create_validation_agent(client), "any input", GROUPS.groups, tool)
+    await validate_document(create_validation_agent(client), "any input", GROUPS.groups)
 
     assert client.options["prompt_cache_key"] == "policy-report-agent:validation"
 

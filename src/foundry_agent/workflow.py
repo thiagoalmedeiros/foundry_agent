@@ -13,8 +13,8 @@ Elicitation runs the whole document to closure as a *single, agent-paced,
 multi-turn conversation*: the agent, guided by the elicitation skill's default
 cadence (EL4), decides how many related open fields to raise per turn — never
 one field at a time, never the entire remaining set at once. Validation runs
-the loaded skill's OWN deterministic script (via the domain-neutral
-``run_skill_validation`` tool bound in :mod:`~foundry_agent.skill_validation`)
+the loaded skill's OWN deterministic script (``validation/validate.py``,
+executed through the skill provider's native ``run_skill_script`` tool)
 plus its own adequacy judgment on top, then either reopens the same
 conversation or advances to the assembler.
 
@@ -77,7 +77,6 @@ from foundry_agent.models import (
     GapReport,
     ValidationResult,
 )
-from foundry_agent.skill_validation import SkillValidator, bind_skill_validation_tool, load_skill_validator
 from foundry_agent.usage import RunUsage
 
 logger = logging.getLogger(__name__)
@@ -378,16 +377,15 @@ class ElicitationExecutor(Executor):
 class ValidationExecutor(Executor):
     """Stage 4 — the skill's own script for presence, the agent for adequacy.
 
-    The workflow itself never encodes a validation RULE — it only imports the
-    loaded skill's script (once, at build time, via
-    :func:`~foundry_agent.skill_validation.load_skill_validator`) and binds it
-    fresh to this run's discovered groups as a tool the agent calls.
+    The workflow itself never encodes a validation RULE — and holds no
+    validation state either: the agent's mounted skill provider executes the
+    loaded skill's own ``validation/validate.py`` through the native
+    ``run_skill_script`` tool, with this run's groups arriving via the prompt.
     """
 
-    def __init__(self, agent: Agent, validator: SkillValidator, usage: RunUsage | None = None) -> None:
+    def __init__(self, agent: Agent, usage: RunUsage | None = None) -> None:
         super().__init__(id="validation")
         self._agent = agent
-        self._validator = validator
         self._usage = usage
 
     @handler
@@ -408,8 +406,7 @@ class ValidationExecutor(Executor):
     async def _validate(self, run: Run, ctx: WorkflowContext[Reclarify | Assemble, str]) -> None:
         """Reopen the conversation, or bank what it produced and move to assembly."""
         groups = run.group_list()
-        tool = bind_skill_validation_tool(self._validator, run.groups)
-        result = await validate_document(self._agent, run.content, groups, tool, usage=self._usage)
+        result = await validate_document(self._agent, run.content, groups, usage=self._usage)
         if result.complete or run.validation_rounds >= MAX_VALIDATION_ROUNDS:
             if not result.complete:
                 logger.info(
@@ -592,7 +589,6 @@ def build_policy_report_workflow(
     elicitation_agent: Agent,
     validation_agent: Agent,
     authoring_agent: Agent,
-    validator: SkillValidator,
     discovery_agent: Agent | None = None,
     field_groups: FieldGroups | None = None,
     usage: RunUsage | None = None,
@@ -602,18 +598,17 @@ def build_policy_report_workflow(
     ``field_groups`` overrides what the discovery agent reads from the format
     skill — tests inject their stub groups here so no discovery call is made.
     ``discovery_agent`` enumerates the groups live when no ``field_groups`` are
-    injected. ``validator`` is the skill's loaded validation script (see
-    :func:`~foundry_agent.skill_validation.load_skill_validator`) — loaded
-    once by the caller so a broken skill fails at build time, not mid-run.
-    One :class:`RunUsage` is shared by every stage so the assembler can log
-    the whole run's per-stage token summary; pass ``usage`` to observe it
-    from outside (tests, DevUI wiring).
+    injected. The skill's deterministic validation script is not wired here:
+    the validation agent executes it through its own mounted skill provider
+    (``run_skill_script``). One :class:`RunUsage` is shared by every stage so
+    the assembler can log the whole run's per-stage token summary; pass
+    ``usage`` to observe it from outside (tests, DevUI wiring).
     """
     usage = usage if usage is not None else RunUsage()
     discovery = DiscoveryExecutor(agent=discovery_agent, groups=field_groups)
     analysis = GapAnalysisExecutor(gap_agent, usage=usage)
     elicitation = ElicitationExecutor(elicitation_agent, usage=usage)
-    validation = ValidationExecutor(validation_agent, validator, usage=usage)
+    validation = ValidationExecutor(validation_agent, usage=usage)
     assembler = AssemblerExecutor(authoring_agent, usage=usage)
     return (
         WorkflowBuilder(
@@ -642,14 +637,24 @@ def build_policy_report_workflow(
 
 
 def create_policy_report_workflow() -> Workflow:
-    """Build the interview with live Azure OpenAI agents (env-configured)."""
+    """Build the interview with live Azure OpenAI agents (env-configured).
+
+    Raises:
+        FileNotFoundError: The format skill ships no ``validation/validate.py``
+            — checked here so a broken skill fails at build time, not when the
+            Validation agent first tries to run it mid-interview.
+    """
+    script = FORMAT_SKILL_DIR / "validation" / "validate.py"
+    if not script.is_file():
+        raise FileNotFoundError(
+            f"{FORMAT_SKILL_DIR.name} ships no validation/validate.py — every format "
+            "skill mounted by this workflow must provide one (run via run_skill_script)"
+        )
     client = create_chat_client()
-    validator = load_skill_validator(FORMAT_SKILL_DIR)
     return build_policy_report_workflow(
         discovery_agent=create_discovery_agent(client),
         gap_agent=create_gap_analysis_agent(client),
         elicitation_agent=create_elicitation_agent(client),
         validation_agent=create_validation_agent(client),
         authoring_agent=create_authoring_agent(client),
-        validator=validator,
     )

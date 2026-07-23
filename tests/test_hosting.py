@@ -31,7 +31,6 @@ from tests.conftest import (
     OPEN_TURN,
     STUB_DOCUMENT,
     TWO_GAP_REPORT,
-    VALIDATOR,
 )
 
 _FAKE_ENV = {
@@ -50,7 +49,6 @@ def _stub_workflow(make_stub_client, make_elicitation_client):
         ),
         validation_agent=create_validation_agent(make_stub_client(COMPLETE_VALIDATION)),
         authoring_agent=create_authoring_agent(make_stub_client(None, text=STUB_DOCUMENT)),
-        validator=VALIDATOR,
         field_groups=GROUPS,
     )
 
