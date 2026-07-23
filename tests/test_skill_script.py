@@ -18,7 +18,14 @@ import sys
 
 from agent_framework import FileSkillsSource, SkillsSourceContext
 
-from foundry_agent.agents import FORMAT_SKILL_DIR, _run_python_skill_script
+from foundry_agent.agents import (
+    FORMAT_SKILL_DIR,
+    _run_python_skill_script,
+    create_validation_agent,
+    validate_document,
+)
+from foundry_agent.prompts import VALIDATION_INSTRUCTIONS, VALIDATION_SCRIPT_NAME
+from tests.conftest import COMPLETE_VALIDATION, GROUPS
 
 SCRIPT_PATH = FORMAT_SKILL_DIR / "validation" / "validate.py"
 
@@ -189,3 +196,38 @@ async def test_runner_surfaces_script_failures_as_error_strings():
     assert isinstance(verdict, str)
     assert verdict.startswith("Error:")
     assert "usage: validate.py" in verdict
+
+
+async def test_runner_flags_a_dict_whose_key_order_is_wrong():
+    """Dict args ride in insertion order; a flipped order must fail loudly, not misvalidate."""
+    skill, script = await _discovered_validate_script()
+
+    verdict = await _run_python_skill_script(
+        skill, script, {"groups": _GROUPS, "captured_values": _fully_valid()}
+    )
+
+    assert isinstance(verdict, str)
+    assert verdict.startswith("Error:")
+
+
+# --- the prompt/discovery contract (drift guards) ---
+
+
+async def test_prompt_names_exactly_the_discovered_script():
+    """VALIDATION_INSTRUCTIONS and FileSkillsSource discovery must agree on the
+    script's name — if the script moves, this is the test that fails instead of
+    every live validation call."""
+    _, script = await _discovered_validate_script()
+
+    assert script.name == VALIDATION_SCRIPT_NAME
+    assert VALIDATION_SCRIPT_NAME in VALIDATION_INSTRUCTIONS
+
+
+async def test_validation_without_a_script_call_logs_a_warning(make_stub_client, caplog):
+    """A response that never ran the script is flagged — the deterministic
+    check silently not running is the failure mode the warning exists for."""
+    client = make_stub_client(COMPLETE_VALIDATION)
+
+    await validate_document(create_validation_agent(client), "any input", GROUPS.groups)
+
+    assert "did not call run_skill_script" in caplog.text

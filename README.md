@@ -58,24 +58,20 @@ skill's Field Groups reference through progressive disclosure and returns
 the groups as structured output. This is a deliberate choice for a
 swap-the-skill template — an agent tolerates whatever markdown a new
 skill's author writes, where a strict parser would force them to match an
-exact grammar or watch the interview fail to start. (A stricter,
-deterministic parser exists — [`field_groups_parser.py`](src/foundry_agent/field_groups_parser.py)
-— but is kept dormant, for the planned sequential sibling where
-drift-loud discovery is the point.)
+exact grammar or watch the interview fail to start.
 
 **Validation is a tool call, not a workflow-level rule.** The Validation
 agent extracts every captured attribute value from the candidate content
-and calls a domain-neutral `run_skill_validation` tool
-([`skill_validation.py`](src/foundry_agent/skill_validation.py)), which
-`importlib`-loads and runs the *loaded skill's own* `validate.py` —
-imported once, eagerly, at workflow-build time, so a broken skill fails
-at startup rather than mid-interview. The agent then layers its own
+and runs the *loaded skill's own* `validation/validate.py` through the
+skill provider's native `run_skill_script` tool — executed as a
+subprocess by a small script runner in
+[`agents.py`](src/foundry_agent/agents.py) (the framework defines the
+runner protocol but ships no implementation). A build-time existence
+check keeps the fail-fast guarantee: a skill shipped without its script
+fails at startup rather than mid-interview. The agent then layers its own
 substantive adequacy judgment on top of the script's deterministic
 result. Swap the skill and its validation rules travel with it; the
-workflow contains no attribute ids, enums, or thresholds of its own. (A
-predecessor mechanical-checks module — [`mechanical_checks.py`](src/foundry_agent/mechanical_checks.py)
-— is kept dormant as a historical reference of the same rules in their
-original code form; it is not imported anywhere.)
+workflow contains no attribute ids, enums, or thresholds of its own.
 
 **Elicitation is agent-paced**, per the elicitation skill's own default
 cadence (EL4): every open field across every discovered group is handed
@@ -115,14 +111,10 @@ src/foundry_agent/
 ├── checkpoint_compat.py        # shim: lets hosted checkpoints restore this workflow's types
 ├── main.py                     # DevUI entrypoint (optional dev tooling)
 ├── workflow.py                 # the global pipeline: discovery → analysis → elicitation → validation → assembler
-├── skill_validation.py         # domain-neutral binding to a skill's own validate.py script
 ├── chat_agent.py               # drives the workflow over chat turns; decodes uploaded files
-├── agents.py                   # 5 agents, skill packs + skill mounts, client factory
-├── field_groups_parser.py      # dormant: strict parser, kept for the sequential sibling
-├── mechanical_checks.py        # dormant: predecessor's hardcoded rules, superseded by the skill's script
+├── agents.py                   # 5 agents, skill packs + skill mounts, client factory, script runner
 ├── usage.py                    # per-stage token accounting + OTel span annotation
-├── models.py                   # structured-output contracts (response_format)
-└── spike_hitl.py               # HITL spike workflow (task devui:spike, no credentials needed)
+└── models.py                   # structured-output contracts (response_format)
 tests/                          # offline suite (stubbed chat clients) + fixtures/
 plans/                          # implementation plans + lessons (project history)
 ```

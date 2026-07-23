@@ -25,6 +25,11 @@ FORMAT_SKILL_DIR = SKILLS_DIR / FORMAT_SKILL_NAME
 ELICITATION_SKILL_NAME = "elicitation"
 ELICITATION_SKILL_DIR = SKILLS_DIR / ELICITATION_SKILL_NAME
 REFERENCES_DIR = FORMAT_SKILL_DIR / "references"
+#: The format skill's validation script as run_skill_script resolves it —
+#: discovered scripts are named by skill-relative path, and this exact string
+#: appears in VALIDATION_INSTRUCTIONS, so prompt and discovery cannot drift
+#: apart silently (pinned by tests/test_skill_script.py).
+VALIDATION_SCRIPT_NAME = "validation/validate.py"
 
 #: Reference files inlined per stateless agent — tailored, not one blob, so no
 #: agent pays for material it never consults. Gap analysis includes
@@ -206,7 +211,7 @@ VALIDATION_INSTRUCTIONS = (
     "1. DETERMINISTIC PRESENCE CHECK — ALWAYS run the format skill's own validation "
     "script before judging anything; never skip it or guess its result. Call the "
     f"run_skill_script tool with skill_name='{FORMAT_SKILL_NAME}', "
-    "script_name='validation/validate.py', and args as a LIST of exactly two JSON "
+    f"script_name='{VALIDATION_SCRIPT_NAME}', and args as a LIST of exactly two JSON "
     "strings: FIRST the captured values — the current value of every attribute the "
     "candidate content populates, keyed by its exact attribute id (e.g. "
     "'{\"PA1\": \"POL-SEC-001\", \"PA2\": \"Remote Work Security Policy\"}') — SECOND "

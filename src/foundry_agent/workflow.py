@@ -53,6 +53,7 @@ from agent_framework import (
 
 from foundry_agent.agents import (
     FORMAT_SKILL_DIR,
+    VALIDATION_SCRIPT_NAME,
     analyze_gaps,
     author_document,
     continue_elicitation_conversation,
@@ -644,10 +645,10 @@ def create_policy_report_workflow() -> Workflow:
             — checked here so a broken skill fails at build time, not when the
             Validation agent first tries to run it mid-interview.
     """
-    script = FORMAT_SKILL_DIR / "validation" / "validate.py"
+    script = FORMAT_SKILL_DIR / VALIDATION_SCRIPT_NAME
     if not script.is_file():
         raise FileNotFoundError(
-            f"{FORMAT_SKILL_DIR.name} ships no validation/validate.py — every format "
+            f"{FORMAT_SKILL_DIR.name} ships no {VALIDATION_SCRIPT_NAME} — every format "
             "skill mounted by this workflow must provide one (run via run_skill_script)"
         )
     client = create_chat_client()

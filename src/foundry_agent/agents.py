@@ -13,9 +13,8 @@ population and inference guidance, the canonical template — lives in the
   per-agent-tailored reference pack read verbatim from the same skill files at
   construction time and inlined into the system prompt, where the prefix cache
   reuses it across calls. Their per-call tool-loop skill reads measured 62% of
-  a run's full-rate tokens, which is why disclosure was retired for them — the
-  evaluation and decision are recorded in
-  ``kb/architecture-and-design/poc-progressive-disclosure-verdict.md``.
+  a run's full-rate tokens, which is why disclosure was retired for them (the
+  predecessor project's recorded progressive-disclosure verdict).
 - The **validation** agent additionally mounts the format skill's provider so
   the native ``run_skill_script`` tool can execute the loaded skill's OWN
   deterministic validation script (``validation/validate.py``, run as a
@@ -73,6 +72,7 @@ from foundry_agent.prompts import (
     REFERENCES_DIR as REFERENCES_DIR,
     VALIDATION_INSTRUCTIONS,
     VALIDATION_PACK,
+    VALIDATION_SCRIPT_NAME,
     _all_groups_scope,
     _open_fields_clause,
     _skill_pack,
@@ -126,11 +126,15 @@ async def _run_python_skill_script(
     the run.
     """
     path = Path(script.full_path)
+    # Minimal environment: skill scripts are pure by contract (SECURITY.md), so
+    # they get no credentials — only what a Python subprocess needs to start.
+    env = {k: v for k in ("PATH", "HOME", "TMPDIR", "LANG", "LC_ALL") if (v := os.environ.get(k))}
     process = await asyncio.create_subprocess_exec(
         sys.executable,
         str(path),
         *_script_argv(args),
         cwd=str(path.parent),
+        env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -140,6 +144,7 @@ async def _run_python_skill_script(
         )
     except TimeoutError:
         process.kill()
+        await process.wait()
         return (
             f"Error: script '{script.name}' timed out after {_SCRIPT_TIMEOUT_SECONDS:g}s."
         )
@@ -521,9 +526,9 @@ async def _conversation_turn(
         ),
     )
     log_usage("elicitation", None, response, usage)
-    if not _loaded_skill(response, ELICITATION_SKILL_NAME) and not _skill_loaded_in_session(
-        session, ELICITATION_SKILL_NAME
-    ):
+    if not _called_tool(
+        response, "load_skill", ELICITATION_SKILL_NAME
+    ) and not _skill_loaded_in_session(session, ELICITATION_SKILL_NAME):
         logger.warning(
             "elicitation agent did not call load_skill('%s') at any point in this session; "
             "the question loop is running without the skill's cadence and invariants",
@@ -532,11 +537,11 @@ async def _conversation_turn(
     return _structured(response, ConversationTurn)
 
 
-def _loaded_skill(response: object, skill_name: str) -> bool:
-    """Whether the run's messages contain a load_skill call for the named skill."""
+def _called_tool(response: object, tool_name: str, argument_fragment: str) -> bool:
+    """Whether the run's messages contain a ``tool_name`` call mentioning ``argument_fragment``."""
     for message in getattr(response, "messages", []) or []:
         for content in getattr(message, "contents", []) or []:
-            if getattr(content, "name", None) == "load_skill" and skill_name in str(
+            if getattr(content, "name", None) == tool_name and argument_fragment in str(
                 getattr(content, "arguments", "")
             ):
                 return True
@@ -586,6 +591,13 @@ async def validate_document(
         ),
     )
     log_usage("validation", None, response, usage)
+    if not _called_tool(response, "run_skill_script", VALIDATION_SCRIPT_NAME):
+        logger.warning(
+            "validation agent did not call run_skill_script('%s'); the skill's "
+            "deterministic presence check did not run — this verdict is adequacy "
+            "judgment only",
+            VALIDATION_SCRIPT_NAME,
+        )
     return _structured(response, ValidationResult)
 
 
