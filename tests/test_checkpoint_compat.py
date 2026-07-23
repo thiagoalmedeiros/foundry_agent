@@ -6,11 +6,16 @@ the predecessor project's restart-survival record.
 """
 
 import agent_framework_foundry_hosting._responses as host_responses
+from agent_framework._workflows._checkpoint_encoding import (
+    decode_checkpoint_value,
+    encode_checkpoint_value,
+)
 
 from foundry_agent.checkpoint_compat import (
     WORKFLOW_CHECKPOINT_TYPE_NAMES,
     install_checkpoint_type_allowlist,
 )
+from foundry_agent.workflow import Run
 
 
 def test_type_names_cover_every_witnessed_blocked_type():
@@ -56,6 +61,26 @@ def test_install_is_idempotent(monkeypatch, tmp_path):
     install_checkpoint_type_allowlist()
 
     assert host_responses.FileCheckpointStorage is once
+
+
+def test_legacy_run_payload_with_removed_field_still_restores():
+    """A Run checkpointed before ``elicitation_turns`` was removed must decode.
+
+    Checkpoints pickle state dataclasses (state dict, no ``__init__`` call), so
+    an old payload carries the removed field as a stray attribute. It must
+    restore cleanly and the stray must not shadow any live field.
+    """
+    legacy = Run(content="doc")
+    legacy.__dict__["elicitation_turns"] = 3  # as an old pickle's state dict has it
+
+    restored = decode_checkpoint_value(
+        encode_checkpoint_value(legacy),
+        allowed_types=frozenset(WORKFLOW_CHECKPOINT_TYPE_NAMES),
+    )
+
+    assert isinstance(restored, Run)
+    assert restored.content == "doc"
+    assert restored.validation_rounds == 1
 
 
 def test_install_degrades_gracefully_if_the_seam_is_gone(monkeypatch, caplog):

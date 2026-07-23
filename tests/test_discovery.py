@@ -54,17 +54,3 @@ async def test_discover_groups_returns_the_agents_groups_in_order(make_stub_clie
         group.group_id for group in GROUPS.groups
     ]
 
-
-async def test_discovery_does_not_read_the_parser(make_stub_client):
-    """Discovery is agent-driven now; the field-groups parser must not be invoked."""
-    import foundry_agent.field_groups_parser as parser_module
-
-    calls: list[object] = []
-    original = parser_module.parse_field_groups
-    parser_module.parse_field_groups = lambda *a, **k: calls.append((a, k))  # type: ignore[assignment]
-    try:
-        await discover_groups(create_discovery_agent(make_stub_client(GROUPS)))
-    finally:
-        parser_module.parse_field_groups = original  # type: ignore[assignment]
-
-    assert calls == []

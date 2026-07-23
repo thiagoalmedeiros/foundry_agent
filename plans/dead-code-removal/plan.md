@@ -92,11 +92,11 @@ Global gate additionally requires the reference grep from Execution Config to re
 
 | #      | Item                                                                 | File/Area    | Status |
 | ------ | -------------------------------------------------------------------- | ------------ | ------ |
-| 1      | `Verify .gitignore coverage; inspect hosted.env for secrets`          | `.gitignore` | ⬜     |
-| 2      | `git init in project root`                                            | repo root    | ⬜     |
-| 3      | `Baseline commit of current state (chore: baseline before dead-code removal)` | repo root    | ⬜     |
-| DoD    | Validate batch (DoD criteria 1)                                       | inline DoD   | ⬜     |
-| Thomas | Verify this batch                                                     | `skill:thomas` | ⛾    |
+| 1      | `Verify .gitignore coverage; inspect hosted.env for secrets`          | `.gitignore` | ✅     |
+| 2      | `git init in project root`                                            | repo root    | ✅     |
+| 3      | `Baseline commit of current state (chore: baseline before dead-code removal)` | repo root    | ✅     |
+| DoD    | Validate batch (DoD criteria 1)                                       | inline DoD   | ✅     |
+| Thomas | Verify this batch                                                     | `skill:thomas` | ✅ (witnessed via /verify, user accepted gate) |
 
 **Verify:** `git log --oneline` → exactly one commit; `git status --porcelain` → empty; `git ls-files | grep -x "\.env"` → no output.
 **DoD Gate:** Run inline DoD criterion 1 against this batch's output using a validation subagent. This step is **mandatory and cannot be skipped**. Mark the DoD row ✅ only after the subagent confirms it passes. If it fails, fix the failure, log the correction in `lessons.md`, and re-run the gate before proceeding.
@@ -108,12 +108,12 @@ Global gate additionally requires the reference grep from Execution Config to re
 
 | #      | Item                                                      | File/Area                                                        | Status |
 | ------ | ---------------------------------------------------------- | ---------------------------------------------------------------- | ------ |
-| 1      | `Delete mechanical_checks.py + its test`                   | `src/foundry_agent/mechanical_checks.py`, `tests/test_mechanical_checks.py` | ⬜     |
-| 2      | `Delete field_groups_parser.py + its test`                 | `src/foundry_agent/field_groups_parser.py`, `tests/test_field_groups_parser.py` | ⬜     |
-| 3      | `Delete spike_hitl.py + its test`                          | `src/foundry_agent/spike_hitl.py`, `tests/test_spike_hitl.py`    | ⬜     |
-| 4      | `Remove devui:spike target`                                | `Taskfile.yml`                                                    | ⬜     |
-| DoD    | Validate batch (DoD criterion 2)                           | inline DoD                                                        | ⬜     |
-| Thomas | Verify this batch                                          | `skill:thomas`                                                    | ⛾     |
+| 1      | `Delete mechanical_checks.py + its test`                   | `src/foundry_agent/mechanical_checks.py`, `tests/test_mechanical_checks.py` | ✅     |
+| 2      | `Delete field_groups_parser.py + its test (+ obsolete cross-test in test_discovery.py)` | `src/foundry_agent/field_groups_parser.py`, `tests/test_field_groups_parser.py`, `tests/test_discovery.py` | ✅     |
+| 3      | `Delete spike_hitl.py + its test`                          | `src/foundry_agent/spike_hitl.py`, `tests/test_spike_hitl.py`    | ✅     |
+| 4      | `Remove devui:spike target`                                | `Taskfile.yml`                                                    | ✅     |
+| DoD    | Validate batch (DoD criterion 2)                           | inline DoD                                                        | ✅     |
+| Thomas | Verify this batch                                          | `skill:thomas`                                                    | ✅     |
 
 **Verify:** `task test` → all remaining tests green (expect ~3 fewer test files collected); `task lint` → clean; `grep -rn "mechanical_checks\|spike_hitl" src/ tests/ main.py Taskfile.yml` → no hits; `grep -rn "field_groups_parser" src/ tests/ main.py Taskfile.yml` → only the `workflow.py` docstring hit (removed in Batch 3).
 **DoD Gate:** Run inline DoD criterion 2 using a validation subagent. Mandatory; on failure fix, log to `lessons.md`, re-run.
@@ -125,13 +125,13 @@ Global gate additionally requires the reference grep from Execution Config to re
 
 | #      | Item                                                                  | File/Area                          | Status |
 | ------ | ---------------------------------------------------------------------- | ---------------------------------- | ------ |
-| 1      | `Remove elicitation_turns field from Run dataclass`                     | `src/foundry_agent/workflow.py:146` | ⬜     |
-| 2      | `Rewrite docstring referencing deleted field_groups_parser`             | `src/foundry_agent/workflow.py:~208` | ⬜     |
-| 3      | `Witness checkpoint-compat tests; revert item 1 + log lesson if restore of old payloads breaks` | `tests/test_checkpoint_compat.py`, `tests/test_hosted_state.py`, `tests/test_chat_agent.py` | ⬜     |
-| DoD    | Validate batch (DoD criterion 3)                                        | inline DoD                          | ⬜     |
-| Thomas | Verify this batch                                                       | `skill:thomas`                      | ⛾     |
+| 1      | `Remove elicitation_turns field from Run dataclass`                     | `src/foundry_agent/workflow.py:146` | ✅     |
+| 2      | `Rewrite docstring referencing deleted field_groups_parser`             | `src/foundry_agent/workflow.py:~208` | ✅     |
+| 3      | `Witness checkpoint-compat tests + NEW legacy-payload regression test (checkpoints pickle state — restore never calls __init__, so removal is safe by construction)` | `tests/test_checkpoint_compat.py`, `tests/test_hosted_state.py`, `tests/test_chat_agent.py` | ✅     |
+| DoD    | Validate batch (DoD criterion 3)                                        | inline DoD                          | ✅     |
+| Thomas | Verify this batch                                                       | `skill:thomas`                      | ✅     |
 
-**Verify:** `task test` → all green, explicitly including the three checkpoint/state test files; `task lint` → clean; `grep -rn "field_groups_parser\|elicitation_turns" src/ tests/ main.py` → no hits.
+**Verify:** `task test` → all green, explicitly including the three checkpoint/state test files; `task lint` → clean; `grep -rn "field_groups_parser\|elicitation_turns" src/ tests/ main.py` → no hits except `tests/test_checkpoint_compat.py`'s legacy-payload regression test, which names the removed field on purpose.
 **DoD Gate:** Run inline DoD criterion 3 using a validation subagent. Mandatory; on failure fix, log to `lessons.md`, re-run.
 **Thomas Gate:** After the DoD Gate passes, dispatch `skill:thomas` as a subagent to execute every check in this batch's `Verify` line itself and confirm witnessed passing output. Thomas will also verify that all tracking-list rows for this batch are marked ✅ in `plan.md`. Mark the Thomas row ✅ only after Thomas issues an **APPROVED** verdict. If Thomas returns **NOT APPROVED**, the batch is not complete.
 
@@ -141,9 +141,9 @@ Global gate additionally requires the reference grep from Execution Config to re
 
 | #      | Item                                                            | File/Area   | Status |
 | ------ | ---------------------------------------------------------------- | ----------- | ------ |
-| 1      | `Global reference grep — zero hits for all three deleted modules` | repo root   | ⬜     |
-| 2      | `Run task test + task lint (global gate)`                        | repo root   | ⬜     |
-| 3      | `Commit deletions (chore: remove dead code — mechanical_checks, field_groups_parser, spike_hitl)` | repo root   | ⬜     |
+| 1      | `Global reference grep — zero hits for all three deleted modules` | repo root   | 🔄     |
+| 2      | `Run task test + task lint (global gate)`                        | repo root   | 🔄     |
+| 3      | `Commit deletions (chore: remove dead code — mechanical_checks, field_groups_parser, spike_hitl)` | repo root   | 🔄     |
 | DoD    | Validate full plan (DoD criteria 1–6)                            | inline DoD  | ⬜     |
 | Thomas | Full plan sign-off                                                | `skill:thomas` | ⛾   |
 

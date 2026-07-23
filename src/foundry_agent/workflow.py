@@ -143,7 +143,6 @@ class Run:
     #: are still open, without re-running analysis. Cleared once validation
     #: banks the run for assembly.
     report: dict | None = None
-    elicitation_turns: int = 0
     validation_rounds: int = 1
     unresolved_ids: list[str] = field(default_factory=list)
     advisory: list[dict] = field(default_factory=list)
@@ -204,9 +203,7 @@ class DiscoveryExecutor(Executor):
     ``read_skill_resource``) and returns its groups, tolerating whatever
     markdown the skill author wrote — which is what lets swapping the skill
     re-target the interview. Tests inject their own :class:`FieldGroups` to
-    stay offline. (The strict deterministic parser this replaced is kept
-    dormant in :mod:`~foundry_agent.field_groups_parser` for the
-    sequential-orchestration sibling.)
+    stay offline.
     """
 
     def __init__(

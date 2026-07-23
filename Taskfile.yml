@@ -29,11 +29,6 @@ tasks:
     cmds:
       - uv run python -m foundry_agent.main
 
-  devui:spike:
-    desc: Launch DevUI with the Batch 1 HITL spike workflow (no model calls).
-    cmds:
-      - uv run python -m foundry_agent.spike_hitl
-
   otel:up:
     desc: Ensure an OTLP collector is listening on :4318 — start our sqlite-backed one only if the port is free (never fights the AI Toolkit collector).
     silent: true
