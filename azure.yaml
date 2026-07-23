@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+requiredVersions:
+    extensions:
+        azure.ai.agents: '>=1.0.0-beta.4'
+name: foundry-agent
+services:
+    ai-project:
+        host: azure.ai.project
+        deployments:
+            - model:
+                format: OpenAI
+                name: gpt-5-mini
+                version: "2025-08-07"
+              name: gpt-5-mini
+              sku:
+                capacity: 50
+                name: GlobalStandard
+    policy-report-agent:
+        project: .
+        host: azure.ai.agent
+        language: python
+        uses:
+            - ai-project
+        env:
+            AZURE_OPENAI_CHAT_DEPLOYMENT_NAME: gpt-5-mini
+            AZURE_OPENAI_ENDPOINT: https://cog-h5axsks72x3km.openai.azure.com/
+            ENABLE_INSTRUMENTATION: "true"
+        codeConfiguration:
+            entryPoint: main.py
+            runtime: python_3_14
+        container:
+            resources:
+                cpu: "0.5"
+                memory: 1Gi
+        description: Policy Report authoring interview (one gap-analysis pass, one agent-paced elicitation conversation, skill-script-backed validation) served over the Foundry Responses protocol, with human-in-the-loop pauses as request_info function calls.
+        kind: hosted
+        metadata:
+            framework: agent-framework
+            protocol: responses
+        name: policy-report-agent
+        protocols:
+            - protocol: responses
+              version: 2.0.0
+        startupCommand: python main.py

@@ -1,0 +1,64 @@
+# pyproject.toml — foundry_agent package.
+#
+# Self-contained Foundry agent template on the Microsoft Agent Framework
+# (Python): a staged authoring interview (Gap Analysis → Elicitation →
+# Validation with human-in-the-loop), currently carrying the Policy Report
+# domain declared by the in-repo skills/ directory.
+#
+# Run from this directory:
+#   task devui   — launch the DevUI against the workflow
+#   task test    — run tests (no live model calls)
+#   task lint    — ruff check
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "foundry-agent"
+version = "0.0.1"
+description = "Foundry agent template: Policy Report authoring interview on Microsoft Agent Framework."
+requires-python = ">=3.11"
+dependencies = [
+    # Microsoft Agent Framework (public preview) — agents, workflows, Azure OpenAI client
+    "agent-framework",
+    # DevUI — OPTIONAL local dev tooling (task devui), NOT the production serving
+    # path. Production serves through agent-framework-foundry-hosting (task
+    # hosted:run → Foundry). Pinned to b260721+: earlier builds crashed response
+    # aggregation on openai>=2.45 (required InputTokensDetails.cache_write_tokens),
+    # which is why openai was formerly pinned <2.45 — that pin is now removed.
+    "agent-framework-devui>=1.0.0b260721",
+    # Production serving: hosts the workflow as a Foundry Hosted Agent.
+    "agent-framework-foundry-hosting>=1.0.0b260721",
+    # Hosted-path auth: create_chat_client falls back to managed identity
+    # (DefaultAzureCredential) when no AZURE_OPENAI_API_KEY is set. Declared
+    # directly because the code imports it — it must not rely on a transitive
+    # edge that a future agent-framework* release could drop, since the
+    # production (no-key) path is the only one that exercises this import.
+    "azure-identity>=1.19",
+    "openai>=2.45",
+    # Structured agent outputs
+    "pydantic~=2.13",
+    # .env loading (Agent Framework does not load .env automatically)
+    "python-dotenv~=1.2",
+]
+
+[tool.uv]
+prerelease = "allow"
+
+[dependency-groups]
+dev = [
+    "pytest~=8.0",
+    "pytest-asyncio~=0.24",
+    "ruff~=0.9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100

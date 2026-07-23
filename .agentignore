@@ -1,0 +1,19 @@
+# Code-deploy ZIP exclusions (gitignore syntax). The runtime needs src/,
+# skills/, main.py, hosted.env, pyproject.toml, and uv.lock — nothing else.
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.checkpoints/
+output/
+plans/
+tests/
+infra/
+.azure/
+.gitignore
+.DS_Store
+README.md
+Taskfile.yml

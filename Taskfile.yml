@@ -1,0 +1,86 @@
+# Taskfile.yml — foundry_agent package (self-contained Agent Framework template).
+
+version: '3'
+
+vars:
+  # Local port for the hosted serving path (hosting.py DEFAULT_PORT); the
+  # Foundry platform overrides PORT in deployment.
+  HOSTED_PORT: '{{.HOSTED_PORT | default "8088"}}'
+
+tasks:
+  default:
+    desc: List available tasks.
+    silent: true
+    cmds:
+      - task --list
+
+  test:
+    desc: Run foundry_agent tests (no live model calls).
+    cmds:
+      - uv run --group dev python -m pytest tests/ -v
+
+  lint:
+    desc: Lint with ruff.
+    cmds:
+      - uv run --group dev ruff check src/ tests/ main.py
+
+  devui:
+    desc: Launch the Agent Framework DevUI serving the full Policy Report workflow (needs AZURE_OPENAI_* env).
+    cmds:
+      - uv run python -m foundry_agent.main
+
+  devui:spike:
+    desc: Launch DevUI with the Batch 1 HITL spike workflow (no model calls).
+    cmds:
+      - uv run python -m foundry_agent.spike_hitl
+
+  otel:up:
+    desc: Ensure an OTLP collector is listening on :4318 — start our sqlite-backed one only if the port is free (never fights the AI Toolkit collector).
+    silent: true
+    cmds:
+      - |
+        if lsof -i :4318 >/dev/null 2>&1; then
+          echo "OTLP collector already on :4318 — reusing it."
+          exit 0
+        fi
+        echo "Starting local OTLP→sqlite collector on :4318…"
+        mkdir -p "$HOME/.aitk/tracing"
+        nohup uv run python -m foundry_agent.otel_collector \
+          > "$HOME/.aitk/tracing/otel_collector.local.log" 2>&1 &
+        for _ in $(seq 1 40); do
+          lsof -i :4318 >/dev/null 2>&1 && break
+          sleep 0.25
+        done
+        if lsof -i :4318 >/dev/null 2>&1; then
+          echo "Collector up (traces → ~/.aitk/tracing/traces.db, log → otel_collector.local.log)."
+        else
+          echo "Collector failed to start — see ~/.aitk/tracing/otel_collector.local.log" >&2
+          exit 1
+        fi
+
+  otel:down:
+    desc: Stop the local sqlite-backed OTLP collector started by `task otel:up` (leaves the AI Toolkit collector alone).
+    silent: true
+    cmds:
+      - pkill -f "foundry_agent.otel_collector" && echo "Stopped local collector." || echo "No local collector running."
+
+  hosted:run:
+    desc: Serve the Policy Report workflow over the Foundry Responses protocol (production serving path; needs AZURE_OPENAI_* env). Mirrors `azd ai agent run`. Ensures OTLP is up first.
+    deps: [otel:up]
+    env:
+      PORT: '{{.HOSTED_PORT}}'
+    cmds:
+      - uv run python -m foundry_agent.hosting
+
+  hosted:invoke:
+    desc: 'Send one message to a running `task hosted:run` server (OpenAI-compatible POST /responses). Override with: task hosted:invoke MESSAGE="..."'
+    env:
+      # Passed via env (not shell interpolation) so quotes/apostrophes in the
+      # message cannot break the command; python builds the JSON body safely.
+      MESSAGE: '{{.MESSAGE | default "Draft a remote-work security policy for a mid-size fintech."}}'
+    cmds:
+      - >-
+        curl -sS -X POST "http://localhost:{{.HOSTED_PORT}}/responses"
+        -H "Content-Type: application/json"
+        -d "$(python3 -c 'import json, os; print(json.dumps({"model": "policy-report-agent", "input": os.environ["MESSAGE"]}))')"
+
