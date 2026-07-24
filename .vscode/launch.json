@@ -15,6 +15,26 @@
             "justMyCode": false
         },
         {
+            // Run and Debug → DevUI: serves the workflow as a chat on :8090 and
+            // AUTO-OPENS the browser (auto_open=True in foundry_agent/main.py).
+            // OTel is on because the endpoint below is set — start `task sim:up`
+            // (Aspire at :18888) or the AI Toolkit tracing view first so the
+            // collector on :4318 is listening.
+            "name": "DevUI (:8090, browser auto-opens, OTel → :4318)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "foundry_agent.main",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+                // agent_framework's exporter defaults to gRPC; the local
+                // collectors speak OTLP http on :4318.
+                "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"
+            }
+        },
+        {
             "name": "Hosted agent + Foundry Toolkit visualizer (OTLP :4319)",
             "type": "debugpy",
             "request": "launch",

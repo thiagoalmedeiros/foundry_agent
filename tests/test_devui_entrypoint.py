@@ -36,3 +36,14 @@ def test_devui_entrypoint_serves_the_workflow_as_a_chat_agent(monkeypatch):
     assert agent.name == "policy-report-agent"
     assert callable(main.main)
     assert main.DEVUI_PORT == 8090
+
+
+def test_devui_instrumentation_is_selected_by_the_otlp_endpoint(monkeypatch):
+    """OTel on exactly when a destination is configured — env-selected, like production."""
+    from foundry_agent import main
+
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    assert main._instrumentation_enabled() is False
+
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+    assert main._instrumentation_enabled() is True

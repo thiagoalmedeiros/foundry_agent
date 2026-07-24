@@ -13,8 +13,10 @@ checkpoint-based ``workflow_hil_response`` path.
 
 import argparse
 import logging
+import os
 
 from agent_framework.devui import serve
+from dotenv import load_dotenv
 
 from foundry_agent.chat_agent import WorkflowChatAgent
 from foundry_agent.workflow import create_policy_report_workflow
@@ -36,6 +38,18 @@ def create_policy_report_agent() -> WorkflowChatAgent:
     )
 
 
+def _instrumentation_enabled() -> bool:
+    """OTel instrumentation on exactly when an OTLP destination is configured.
+
+    Env-selected like every other environment concern here: point
+    ``OTEL_EXPORTER_OTLP_ENDPOINT`` at a collector (``task sim:up``'s on
+    :4318, the AI Toolkit's, or the Foundry Toolkit visualizer's) and DevUI
+    traces flow there; leave it unset and instrumentation stays off, so a
+    collector-less run never spams exporter retries against a closed port.
+    """
+    return bool(os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"))
+
+
 def main() -> None:
     """Serve the Policy Report workflow in DevUI."""
     # Uvicorn only configures its own loggers; without this the package's INFO
@@ -47,6 +61,10 @@ def main() -> None:
     # DevUI logs every raw request body at INFO — with INFO now enabled, that
     # would write users' pasted documents verbatim into the server log.
     logging.getLogger("agent_framework_devui._server").setLevel(logging.WARNING)
+    # Own .env loading explicitly (mirrors hosting.main): the instrumentation
+    # gate below reads the environment BEFORE the first conversation would
+    # otherwise trigger create_chat_client()'s lazy load_dotenv().
+    load_dotenv()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--port",
@@ -62,6 +80,7 @@ def main() -> None:
         port=args.port,
         auto_open=True,
         auth_enabled=False,
+        instrumentation_enabled=_instrumentation_enabled(),
     )
 
 
