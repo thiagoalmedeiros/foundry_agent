@@ -1,0 +1,34 @@
+{
+    // F5 target for the Microsoft Foundry Toolkit's hosted-agent flow: starts
+    // the /responses server on :8088 with debugging; the toolkit's Agent
+    // Inspector attaches to it for interactive testing. Root main.py loads
+    // hosted.env (HOSTED_AGENT_MODE=chat), so Inspector turns render as text.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Hosted agent (Foundry Responses protocol, :8088)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Hosted agent + Foundry Toolkit visualizer (OTLP :4319)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                // The toolkit's 'Open Visualizer for Hosted Agents' listens on
+                // its Hosted Agent Visualization Port (default 4319); the
+                // hosting SDK's OTel distro follows this env var — same
+                // env-only selection mechanism production uses.
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4319"
+            }
+        }
+    ]
+}
