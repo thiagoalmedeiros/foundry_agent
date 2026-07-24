@@ -1,5 +1,8 @@
 # Plan: Give WorkflowChatAgent (chat mode) real restart survival via checkpoint persistence
 
+> SUPERSEDED-IN-PART 2026-07-23: Batches 2-3 were executed by `plans/local-deploy-sim` Batch 2 (rows marked by reference below); its Batch 3 witnessed restart-survival demo covers this plan's Batch 4 intent.
+>
+
 > Origin: user asked to "move current implementation of session store/persistence to
 > durabletask for agent framework" — grilled via `skill:grill-me` and rejected as stated:
 > the Microsoft Agent Framework Durable Extension is a competing *hosting model* (Azure
@@ -129,10 +132,10 @@ Global/final: the same two commands, plus the manual restart-survival smoke desc
 
 | #      | Item              | File/Area                     | Status |
 | ------ | ----------------- | ------------------------------ | ------ |
-| 1      | On a `_conversations` cache miss, check `get_latest(workflow_name=...)` before falling back to `self._workflow_factory()` | `src/foundry_agent/chat_agent.py` | ⬜ |
-| 2      | Restore-only `run(checkpoint_id=..., checkpoint_storage=...)` call; recover `pending_request_id` from `get_request_info_events()`; fall back to fresh with a logged warning if nothing pending | `src/foundry_agent/chat_agent.py` | ⬜ |
-| 3      | On the existing `except Exception` path, best-effort clear that conversation's on-disk checkpoint | `src/foundry_agent/chat_agent.py` | ⬜ |
-| 4      | Update the **Chat mode** section of the module docstring (restart survival is no longer "lost"; note the still-out-of-scope `"default"` conversation-id assumption) | `src/foundry_agent/hosting.py` | ⬜ |
+| 1      | On a `_conversations` cache miss, check `get_latest(workflow_name=...)` before falling back to `self._workflow_factory()` | `src/foundry_agent/chat_agent.py` | ✅ (by plans/local-deploy-sim B2, 2026-07-23) |
+| 2      | Restore-only `run(checkpoint_id=..., checkpoint_storage=...)` call; recover `pending_request_id` from `get_request_info_events()`; fall back to fresh with a logged warning if nothing pending | `src/foundry_agent/chat_agent.py` | ✅ (by plans/local-deploy-sim B2, 2026-07-23) |
+| 3      | On the existing `except Exception` path, best-effort clear that conversation's on-disk checkpoint | `src/foundry_agent/chat_agent.py` | ✅ (by plans/local-deploy-sim B2, 2026-07-23) |
+| 4      | Update the **Chat mode** section of the module docstring (restart survival is no longer "lost"; note the still-out-of-scope `"default"` conversation-id assumption) | `src/foundry_agent/hosting.py` | ✅ (by plans/local-deploy-sim B2, 2026-07-23) |
 | Thomas | Verify this batch | `skill:thomas` | ⛾ |
 
 **Verify:** `task test` → `task lint` → both green.
@@ -144,10 +147,10 @@ Global/final: the same two commands, plus the manual restart-survival smoke desc
 
 | #      | Item              | File/Area                     | Status |
 | ------ | ----------------- | ------------------------------ | ------ |
-| 1      | `test_resumes_after_restart` — discard-and-rebuild-agent resume test | `tests/test_chat_agent_persistence.py` (new) | ⬜ |
-| 2      | `test_conversations_are_isolated` — two conversation_ids never cross-contaminate | `tests/test_chat_agent_persistence.py` | ⬜ |
-| 3      | `test_error_clears_checkpoint` — a broken run's checkpoint cannot be resurrected | `tests/test_chat_agent_persistence.py` | ⬜ |
-| 4      | Confirm `tests/test_hosted_state.py` unchanged and green | `tests/test_hosted_state.py` | ⬜ |
+| 1      | `test_resumes_after_restart` — discard-and-rebuild-agent resume test | `tests/test_chat_agent_persistence.py` (new) | ✅ (by plans/local-deploy-sim B2, 2026-07-23) |
+| 2      | `test_conversations_are_isolated` — two conversation_ids never cross-contaminate | `tests/test_chat_agent_persistence.py` | ✅ (by plans/local-deploy-sim B2, 2026-07-23) |
+| 3      | `test_error_clears_checkpoint` — a broken run's checkpoint cannot be resurrected | `tests/test_chat_agent_persistence.py` | ✅ (by plans/local-deploy-sim B2, 2026-07-23) |
+| 4      | Confirm `tests/test_hosted_state.py` unchanged and green | `tests/test_hosted_state.py` | ✅ (by plans/local-deploy-sim B2, 2026-07-23) |
 | Thomas | Verify this batch | `skill:thomas` | ⛾ |
 
 **Verify:** `task test` → new suite green alongside the full existing suite; `task lint` clean.

@@ -1,0 +1,38 @@
+# Collector config for the local deploy sim (infra/local/docker-compose.yml).
+#
+# Receives OTLP exactly where the hosted platform's env points the agent
+# (OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 — the same variable the
+# Foundry platform injects in production, so the agent code never changes),
+# and forwards everything to the Aspire dashboard's OTLP ingest for viewing.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch: {}
+
+exporters:
+  otlp/aspire:
+    endpoint: aspire:18889
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/aspire]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/aspire]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/aspire]

@@ -141,11 +141,35 @@ task hosted:invoke              # POST one /responses turn to a running hosted:r
 
 # Optional dev tooling (NOT the production path)
 task devui                      # full workflow in DevUI on :8090 (real model calls)
-task devui:spike                # HITL spike, no credentials needed
 
 task test                       # offline test suite (stubbed chat clients)
 task lint                       # ruff
 ```
+
+## Local deploy simulation
+
+Simulates the deployed environment's *wiring*, not its services: the exact
+artifact that ships runs locally with only environment differences. There
+are deliberately no storage emulators — Foundry persistence is env-selected
+and platform-owned (host-managed file checkpoints plus the platform's own
+storage API), so the faithful local equivalents are the plain filesystem and
+the host's built-in fallbacks. See
+[`plans/local-deploy-sim/plan.md`](plans/local-deploy-sim/plan.md).
+
+```bash
+task sim:up      # OTel collector (:4318) + Aspire dashboard (http://localhost:18888)
+task sim:smoke   # reachability checks for both
+task sim:run     # serve the agent on the host (chat mode), traces → Aspire
+task sim:down    # tear everything down
+```
+
+Restart survival: chat conversations checkpoint every turn under
+`.checkpoints/chat/<conversation>/`. Kill `task sim:run` mid-interview,
+start it again, send the next message — the conversation resumes from its
+latest checkpoint. In production the platform's persistent per-session
+containers preserve that checkpoint root; locally the filesystem does.
+If `task otel:up`'s sqlite collector already owns :4318, run `task otel:down`
+first.
 
 Environment notes (hard-won — see `plans/*/lessons.md`):
 

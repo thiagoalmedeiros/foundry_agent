@@ -17,6 +17,12 @@ State is keyed by the DevUI conversation (``session.session_id``); a new
 conversation starts a fresh workflow. The workflow's own pause/resume machinery
 (``run(text)`` → ``run(responses={request_id: answer})``) is what actually
 drives it, so only the presentation changes.
+
+Every turn checkpoints to per-conversation file storage, and a conversation
+missing from the in-process cache — what a restarted process sees — is first
+restored from its latest checkpoint (:meth:`WorkflowChatAgent._restore_pending`)
+before falling back to a fresh run. Restore is deliberately best-effort: a
+corrupt or stale checkpoint degrades to a clean restart, never a dead chat.
 """
 
 import base64
@@ -153,6 +159,49 @@ class WorkflowChatAgent(BaseAgent):
             allowed_checkpoint_types=list(WORKFLOW_CHECKPOINT_TYPE_NAMES),
         )
 
+    async def _restore_pending(self, conversation: _Conversation) -> bool:
+        """Resume a prior process's paused run from its latest checkpoint.
+
+        Returns True only when a checkpoint restored AND re-emitted a pending
+        elicitation request (recorded on the conversation). Everything else —
+        no checkpoint at all, a restore failure, or a restored run with
+        nothing pending — returns False so the caller starts fresh, and the
+        two failure shapes also clear the stale checkpoints so the next
+        restart does not retry a restore already known to be doomed.
+        """
+        try:
+            latest = await conversation.storage.get_latest(
+                workflow_name=conversation.workflow.name
+            )
+            if latest is None:
+                return False
+            result = await conversation.workflow.run(
+                checkpoint_id=latest.checkpoint_id,
+                checkpoint_storage=conversation.storage,
+            )
+        except Exception:  # noqa: BLE001 - degrade to a fresh start, never a dead chat
+            logger.warning(
+                "checkpoint restore failed for %s; starting fresh",
+                conversation.workflow.name,
+                exc_info=True,
+            )
+            await _prune_checkpoints(
+                conversation.storage, conversation.workflow.name, keep_latest=False
+            )
+            return False
+        pending = result.get_request_info_events()
+        if not pending:
+            logger.warning(
+                "checkpoint for %s restored with nothing pending; starting fresh",
+                conversation.workflow.name,
+            )
+            await _prune_checkpoints(
+                conversation.storage, conversation.workflow.name, keep_latest=False
+            )
+            return False
+        conversation.pending_request_id = pending[0].request_id
+        return True
+
     def run(  # type: ignore[override]
         self,
         messages: object = None,
@@ -190,9 +239,13 @@ class WorkflowChatAgent(BaseAgent):
     async def _advance(self, conversation_id: str, user_text: str) -> str:
         """Start or resume the workflow and return the next assistant message.
 
-        On any failure the conversation is dropped and the error is returned as
-        visible assistant text so the user's next message restarts the workflow
-        cleanly instead of resuming a broken run (and never sees an empty bubble).
+        A conversation absent from the in-process cache is not necessarily new:
+        after a process restart the cache is empty but the checkpoints survive,
+        so the miss path first tries :meth:`_restore_pending` and only then
+        starts fresh. On any failure the conversation is dropped — including
+        its on-disk checkpoints, so the next message cannot resume the broken
+        run — and the error is returned as visible assistant text (never an
+        empty bubble).
         """
         conversation = self._conversations.get(conversation_id)
         try:
@@ -201,9 +254,15 @@ class WorkflowChatAgent(BaseAgent):
                     self._workflow_factory(), self._checkpoint_storage_for(conversation_id)
                 )
                 self._conversations[conversation_id] = conversation
-                result = await conversation.workflow.run(
-                    user_text, checkpoint_storage=conversation.storage
-                )
+                if await self._restore_pending(conversation):
+                    result = await conversation.workflow.run(
+                        responses={conversation.pending_request_id: user_text},
+                        checkpoint_storage=conversation.storage,
+                    )
+                else:
+                    result = await conversation.workflow.run(
+                        user_text, checkpoint_storage=conversation.storage
+                    )
             else:
                 result = await conversation.workflow.run(
                     responses={conversation.pending_request_id: user_text},
@@ -211,6 +270,10 @@ class WorkflowChatAgent(BaseAgent):
                 )
         except Exception as exc:  # noqa: BLE001 - surface as chat text, not empty bubble
             self._conversations.pop(conversation_id, None)
+            if conversation is not None:
+                await _prune_checkpoints(
+                    conversation.storage, conversation.workflow.name, keep_latest=False
+                )
             return f"{ERROR_REPLY_PREFIX}{exc}"
 
         pending = result.get_request_info_events()

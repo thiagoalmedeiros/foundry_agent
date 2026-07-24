@@ -59,6 +59,51 @@ tasks:
     cmds:
       - pkill -f "foundry_agent.otel_collector" && echo "Stopped local collector." || echo "No local collector running."
 
+  sim:up:
+    desc: Start the local deploy-sim stack (OTel collector + Aspire dashboard). If :4318 is busy, run `task otel:down` first.
+    cmds:
+      - docker compose -f infra/local/docker-compose.yml up -d --wait
+
+  sim:down:
+    desc: Stop the local deploy-sim stack and remove its containers.
+    cmds:
+      - docker compose -f infra/local/docker-compose.yml down
+
+  sim:run:
+    desc: Serve the agent on the host against the sim stack (chat mode, traces → compose collector → Aspire at http://localhost:18888).
+    deps: [sim:up]
+    env:
+      PORT: '{{.HOSTED_PORT}}'
+      # Chat mode is what the restart-survival demo exercises (per-turn file
+      # checkpoints + resume); production sets this via hosted.env / platform env.
+      HOSTED_AGENT_MODE: chat
+      # The same variable the Foundry platform injects in production — pointing
+      # it at the compose collector is the whole "deploy simulation" for OTel.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318
+    cmds:
+      - uv run python -m foundry_agent.hosting
+
+  sim:smoke:
+    desc: Verify the sim stack answers — collector OTLP on :4318, Aspire UI on :18888.
+    silent: true
+    cmds:
+      - |
+        code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "http://localhost:4318/v1/traces" \
+          -H "Content-Type: application/json" -d '{}')
+        if [ "$code" = "200" ]; then
+          echo "Collector OTLP :4318 answers (HTTP $code)."
+        else
+          echo "Collector OTLP :4318 unexpected response: HTTP $code" >&2
+          exit 1
+        fi
+      - |
+        if curl -fsSL -o /dev/null "http://localhost:18888"; then
+          echo "Aspire dashboard UI :18888 answers."
+        else
+          echo "Aspire dashboard UI :18888 not reachable" >&2
+          exit 1
+        fi
+
   hosted:run:
     desc: Serve the Policy Report workflow over the Foundry Responses protocol (production serving path; needs AZURE_OPENAI_* env). Mirrors `azd ai agent run`. Ensures OTLP is up first.
     deps: [otel:up]

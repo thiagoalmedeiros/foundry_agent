@@ -1,0 +1,35 @@
+# Local deploy simulation — observability only (plans/local-deploy-sim).
+#
+# Persistence deliberately has NO services here: production Foundry persistence
+# is env-selected and platform-owned (host-managed file checkpoints + the
+# platform's storage API), so the faithful local equivalent is the plain
+# filesystem — not an emulator. This stack only provides what production also
+# provides via environment: an OTLP endpoint (collector) and a trace UI (Aspire).
+#
+# Lifecycle: task sim:up / task sim:smoke / task sim:down.
+# Port note: the collector binds host :4318 — the same port task otel:up's
+# sqlite collector uses. `task otel:up` defers when the port is busy; if the
+# sqlite collector is already running, stop it first (task otel:down).
+
+name: foundry-agent-local-sim
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.116.1
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4318:4318" # OTLP http — where OTEL_EXPORTER_OTLP_ENDPOINT points
+      - "4317:4317" # OTLP grpc
+    depends_on:
+      - aspire
+
+  aspire:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.1
+    environment:
+      # Local-only convenience; the dashboard is bound to localhost and holds
+      # no secrets — do not reuse this setting anywhere internet-reachable.
+      - DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS=true
+    ports:
+      - "18888:18888" # dashboard UI; OTLP ingest (18889) stays on the compose network

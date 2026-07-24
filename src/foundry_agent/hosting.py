@@ -32,10 +32,13 @@ playground, ``azd ai agent invoke`` — render assistant *text* only, so a
 the stream carries zero ``output_text`` events). In chat mode the host serves
 :class:`~foundry_agent.chat_agent.WorkflowChatAgent` instead: every
 elicitation pause becomes ordinary assistant text and the user's next message
-resumes the run. Its conversation state lives in process memory, which the
-platform's persistent per-session containers preserve between turns; a
-session restart loses the interview, which is the trade against the
-checkpoint-backed ``workflow`` mode kept for machine clients.
+resumes the run. Conversation state checkpoints to per-conversation file
+storage every turn (``CHAT_CHECKPOINT_STORAGE_PATH``), and a restarted
+process restores the paused interview from the latest checkpoint — restart
+survival holds wherever that checkpoint root survives (the platform's
+persistent per-session containers hosted; the plain filesystem locally).
+Still assumed out of scope: clients that send no conversation id share the
+``"default"`` conversation.
 
 **Observability** is a third thing the hosting infrastructure owns: building
 a :class:`~agent_framework_foundry_hosting.ResponsesHostServer` unconditionally
