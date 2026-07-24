@@ -51,7 +51,9 @@ multi-turn session. The **discovery**, **gap-analysis**, **validation**,
 and **authoring** agents carry per-agent reference packs read *verbatim
 from the same skill files* at construction time and inlined into their
 system prompts (cheaper than a tool loop for stateless calls — the
-predecessor project measured it).
+predecessor project measured it). The validation agent additionally
+mounts the format skill's provider — not for disclosure, but so the
+native `run_skill_script` tool can execute the skill's validation script.
 
 **Discovery is an LLM agent**, not a deterministic parser: it reads the
 skill's Field Groups reference through progressive disclosure and returns
@@ -93,8 +95,10 @@ Two entrypoints, deliberately distinct:
   pauses surface as `request_info` function calls. A `HOSTED_AGENT_MODE=chat`
   switch instead serves `WorkflowChatAgent` — plain assistant text — for
   chat-first clients (the Foundry playground, `azd ai agent invoke`) that
-  cannot render a raw function-call pause. Deploy config lives in
-  [`azure.yaml`](azure.yaml) (`azd provision` / `azd deploy`).
+  cannot render a raw function-call pause. Chat conversations checkpoint
+  every turn and a restarted process resumes them from the latest
+  checkpoint (see **Local deploy simulation** below). Deploy config lives
+  in [`azure.yaml`](azure.yaml) (`azd provision` / `azd deploy`).
 - **Dev tooling only — DevUI** ([`main.py`](src/foundry_agent/main.py),
   `task devui`): an optional local inspector for driving the workflow
   interactively. Not the production path; nothing production depends on it.
@@ -106,14 +110,17 @@ skills/policy-report-format/    # WHAT a Policy Report is + its own validation s
 skills/elicitation/             # HOW the question loop runs (EL1-EL14)
 azure.yaml                      # Foundry hosted-agent deploy config (azd provision/deploy)
 main.py                         # Foundry code-deploy entrypoint → foundry_agent.hosting.main
+infra/local/                    # local deploy sim: OTel collector + Aspire (docker compose)
 src/foundry_agent/
 ├── hosting.py                  # PRODUCTION entrypoint — WorkflowAgent + ResponsesHostServer (+ chat mode)
 ├── checkpoint_compat.py        # shim: lets hosted checkpoints restore this workflow's types
 ├── main.py                     # DevUI entrypoint (optional dev tooling)
 ├── workflow.py                 # the global pipeline: discovery → analysis → elicitation → validation → assembler
-├── chat_agent.py               # drives the workflow over chat turns; decodes uploaded files
+├── chat_agent.py               # drives the workflow over chat turns; per-turn checkpoints + restart resume
 ├── agents.py                   # 5 agents, skill packs + skill mounts, client factory, script runner
+├── prompts.py                  # everything the agents are told: instructions, packs, per-turn clauses
 ├── usage.py                    # per-stage token accounting + OTel span annotation
+├── otel_collector.py           # dev tooling: sqlite-backed OTLP collector (task otel:up)
 └── models.py                   # structured-output contracts (response_format)
 tests/                          # offline suite (stubbed chat clients) + fixtures/
 plans/                          # implementation plans + lessons (project history)
@@ -197,19 +204,22 @@ Deploy to Foundry: `azd provision` then `azd deploy` against
    reference-file names the prompt packs read.
 2. Author your skill's own `validation/validate.py` (contract: a
    module-level `validate(captured_values: dict[str, str], groups: list[dict]) -> list[str]`
-   returning failing attribute ids — see the policy-report-format skill's
-   own script and its `validation/SECURITY.md` for the trust model). No
-   workflow code changes: `skill_validation.py` loads whatever the mounted
-   skill provides.
+   returning failing attribute ids, plus the CLI `__main__` wrapper —
+   `python validate.py '<captured JSON>' '<groups JSON>'` → failing ids as
+   JSON on stdout — because the Validation agent runs it as a subprocess
+   via the skill provider's native `run_skill_script` tool. See the
+   policy-report-format skill's own script and its `validation/SECURITY.md`
+   for the trust model. No workflow code changes: the provider discovers
+   and runs whatever script the mounted skill ships.
 3. Rewrite the instruction blocks in `prompts.py` to your vocabulary — the
    Discovery agent needs no changes; it already reads whatever groups your
    skill declares.
 4. Repin the tests (`tests/conftest.py` fixtures and the skill-reading
    tests) and vendor a sample input under `tests/fixtures/`.
 
-The workflow (`workflow.py`), the agent wiring (`agents.py`), and the
-skill-validation binding (`skill_validation.py`) need **no changes** for a
-domain fork — only the skill content and the prompt vocabulary do.
+The workflow (`workflow.py`) and the agent wiring (`agents.py`, including
+its domain-neutral skill-script runner) need **no changes** for a domain
+fork — only the skill content and the prompt vocabulary do.
 
 ## Architecture note: graph API vs functional API
 
