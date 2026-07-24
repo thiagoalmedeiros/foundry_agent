@@ -49,12 +49,10 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from foundry_agent.models import (
-    AttributeStatus,
     CapturedValue,
     ConversationTurn,
     FieldGroup,
     FieldGroups,
-    GapReport,
     ValidationResult,
 )
 from foundry_agent.usage import RunUsage, log_usage
@@ -67,14 +65,11 @@ from foundry_agent.prompts import (
     ELICITATION_SKILL_NAME,
     FORMAT_SKILL_DIR,
     FORMAT_SKILL_NAME as FORMAT_SKILL_NAME,
-    GAP_ANALYSIS_INSTRUCTIONS,
-    GAP_ANALYSIS_PACK,
     REFERENCES_DIR as REFERENCES_DIR,
     VALIDATION_INSTRUCTIONS,
     VALIDATION_PACK,
     VALIDATION_SCRIPT_NAME,
     _all_groups_scope,
-    _open_fields_clause,
     _skill_pack,
 )
 
@@ -273,16 +268,6 @@ def create_discovery_agent(
     )
 
 
-def create_gap_analysis_agent(client: SupportsChatGetResponse) -> Agent:
-    """Create the Gap Analysis agent for a single global pass, reference pack inlined."""
-    return Agent(
-        client,
-        f"{GAP_ANALYSIS_INSTRUCTIONS}{_skill_pack(GAP_ANALYSIS_PACK)}",
-        name="gap-analysis",
-        description="Maps candidate content against every field group's attributes in one pass.",
-    )
-
-
 def create_elicitation_agent(
     client: SupportsChatGetResponse, skills: SkillsProvider | None = None
 ) -> Agent:
@@ -363,150 +348,61 @@ async def discover_groups(agent: Agent, usage: RunUsage | None = None) -> FieldG
     return _structured(response, FieldGroups)
 
 
-async def analyze_gaps(
-    agent: Agent,
-    candidate_text: str,
-    groups: list[FieldGroup],
-    usage: RunUsage | None = None,
-) -> GapReport:
-    """Run gap analysis over candidate content in ONE pass across every group.
-
-    Raises:
-        pydantic.ValidationError: The response does not conform to `GapReport`
-            (raised by the framework when parsing the structured output).
-    """
-    prompt = (
-        f"{_all_groups_scope(groups)}\n\n"
-        f"Candidate Policy Report content:\n---\n{candidate_text}"
-    )
-    response = await agent.run(
-        prompt,
-        options=ChatOptions(response_format=GapReport, prompt_cache_key=_cache_key("analysis")),
-    )
-    log_usage("analysis", None, response, usage)
-    return _structured(response, GapReport)
-
-
-def _ordered_targets(report: GapReport) -> list[AttributeStatus]:
-    """The document's attributes that need a turn, in the report's own order.
-
-    An attribute needs a turn when it is required-and-missing (a gap to ask
-    for) or populated-with-an-inferred-value (a value to confirm). Anything
-    else (optional and unpopulated) is silently skipped.
-
-    Deliberately NOT reordered against any group's declared ``attribute_ids``:
-    gap analysis is instructed to report attributes in the discovered groups'
-    order already, and re-deriving order by looking each one up in a group's
-    id list would silently drop any attribute no group claims — the exact
-    loss :func:`~foundry_agent.workflow._reclaim_unclaimed` exists to prevent.
-    """
-    return [
-        entry
-        for entry in report.attributes
-        if (entry.required and not entry.populated) or (entry.populated and entry.inferred_value)
-    ]
-
-
-async def open_elicitation_conversation(
+async def open_group_conversation(
     agent: Agent,
     session: AgentSession,
-    groups: list[FieldGroup],
-    report: GapReport,
-    candidate_text: str,
+    group: FieldGroup,
+    content: str,
     usage: RunUsage | None = None,
 ) -> ConversationTurn:
-    """Start the whole-document conversation with the first group's framing.
+    """Open the conversation for ONE field group.
 
-    The WHOLE list of open fields across every group is handed to the agent
-    in one prompt — it chooses its own turn-sized cluster from this list,
-    guided by the elicitation skill's cadence, rather than the workflow
-    walking a field queue.
+    The agent judges what the content already supports for this group's fields,
+    presents inferred values for confirmation and asks for what is missing, in
+    plain stakeholder language (never attribute ids). It sets
+    ``conversation_complete`` when this group's Adequacy is satisfied.
     """
-    targets = _ordered_targets(report)
-    if not targets:
-        return ConversationTurn(message="", conversation_complete=True, captured=[])
-    opening_framing = groups[0].framing_line() if groups else ""
     prompt = (
-        f"{_all_groups_scope(groups)}\n"
-        "Framing line to open the conversation with verbatim (do not prefix it with any "
-        f"label):\n{opening_framing}\n\n"
-        f"{_open_fields_clause(targets)}\n\n"
-        f"Candidate Policy Report content so far:\n---\n{candidate_text}\n---\n"
-        "Produce the opening turn: the framing line, then a small, related cluster of "
-        "fields chosen from the open fields above — never all of them at once."
+        f"Field group to clarify now: {group.heading}\n"
+        "Open with this framing line verbatim (no label prefix):\n"
+        f"{group.framing_line()}\n\n"
+        "Attributes in this group (internal ids — NEVER shown to the user): "
+        f"{', '.join(group.attribute_ids)}\n"
+        f"Adequacy — what 'done' means for this group:\n{group.adequacy}\n\n"
+        f"Content gathered so far:\n---\n{content}\n---\n"
+        "Drive a natural conversation to clarify THIS group's points: infer what the "
+        "content already supports and present it for confirmation, ask for what is "
+        "missing, in plain stakeholder language. Set conversation_complete=true when "
+        "this group's Adequacy is satisfied."
     )
     return await _conversation_turn(agent, session, prompt, usage=usage)
 
 
-async def continue_elicitation_conversation(
+async def continue_group_conversation(
     agent: Agent,
     session: AgentSession,
-    report: GapReport,
+    group: FieldGroup,
     prior_captured: list[CapturedValue],
     reply: str,
     usage: RunUsage | None = None,
 ) -> ConversationTurn:
-    """Feed the user's reply into the conversation; the agent paces what comes next.
+    """Feed the user's reply into the CURRENT group's conversation.
 
-    ``prior_captured`` — what the conversation has settled so far — decides
-    which fields are STILL open, computed here rather than left to the
-    model's own memory: the agent's session carries the natural conversation,
-    but "what remains" is always recomputed server-side.
+    ``prior_captured`` is what this group has settled so far; the agent returns
+    the cumulative captured set and sets ``conversation_complete`` when the
+    group's Adequacy holds.
     """
-    targets = _ordered_targets(report)
-    captured_ids = {value.attribute_id for value in prior_captured}
-    remaining = [t for t in targets if t.attribute_id not in captured_ids]
+    settled = ", ".join(value.attribute_id for value in prior_captured) or "(none yet)"
     prompt = (
+        f"Still clarifying this group: {group.heading}\n"
+        f"Adequacy — what 'done' means for this group:\n{group.adequacy}\n\n"
+        f"Already settled this group: {settled}\n"
         f"The user replied:\n---\n{reply}\n---\n"
-        "Judge this reply against the format skill's rules for every field it "
-        "addresses — read it for EVERY value it carries, not just the fields you last "
-        "asked about; a rich reply commonly settles fields you have not raised yet too.\n"
-        "Return `captured` CUMULATIVELY: every value settled anywhere in this "
-        "conversation so far, including ones captured on earlier turns. A value you omit "
-        "is a value the document loses.\n\n"
-        + (
-            f"{_open_fields_clause(remaining)}\n\n"
-            "Produce your next turn: choose a small, related cluster from the open "
-            "fields above — never all of them at once."
-            if remaining
-            else "Every field is now captured, confirmed, or unresolved: set "
-            "conversation_complete=true and give a brief closing line (no new question)."
-        )
-    )
-    return await _conversation_turn(agent, session, prompt, usage=usage)
-
-
-async def reopen_elicitation_conversation(
-    agent: Agent,
-    session: AgentSession,
-    report: GapReport,
-    result: ValidationResult,
-    usage: RunUsage | None = None,
-) -> ConversationTurn:
-    """Resume the conversation on what validation judged still inadequate.
-
-    Falls back to the bare attribute id for anything validation named that
-    analysis' report never carried — a mismatch worth surfacing rather than
-    silently masking.
-    """
-    by_id = {entry.attribute_id: entry for entry in report.attributes}
-    targets = [
-        by_id.get(aid)
-        or AttributeStatus(attribute_id=aid, name=aid, required=True, populated=False)
-        for aid in result.missing_attribute_ids
-    ]
-    findings = "\n".join(
-        f"- {finding.reference_id}: {finding.summary}" for finding in result.advisory_findings
-    )
-    if not targets:
-        return ConversationTurn(message="", conversation_complete=True, captured=[])
-    prompt = (
-        "Validation judged the document not yet adequate.\n"
-        f"Rationale: {result.rationale}\n"
-        f"Findings:\n{findings or '(none)'}\n\n"
-        f"{_open_fields_clause(targets)}\n\n"
-        "Continue the same conversation: choose a small, related cluster from the "
-        "still-inadequate fields above — never all of them at once."
+        "Judge the reply against this group's Adequacy for every field it addresses. "
+        "Return `captured` CUMULATIVELY — every value settled for this group so far, "
+        "keyed by its exact attribute id. If this group's Adequacy is now satisfied, "
+        "set conversation_complete=true with a brief closing line; otherwise continue "
+        "clarifying this group's remaining points in plain language (never show ids)."
     )
     return await _conversation_turn(agent, session, prompt, usage=usage)
 
@@ -525,7 +421,15 @@ async def _conversation_turn(
         prompt,
         session=session,
         options=ChatOptions(
-            response_format=ConversationTurn, prompt_cache_key=_cache_key("elicitation")
+            response_format=ConversationTurn,
+            prompt_cache_key=_cache_key("elicitation"),
+            # Low reasoning effort keeps each conversational turn fast: judging one
+            # reply against the current group's adequacy — or answering a greeting
+            # or clarifying question — needs no deep multi-second reasoning pass.
+            # This client speaks the OpenAI Responses API, whose structured-output
+            # (.parse) path takes reasoning={"effort": ...}; the Chat-Completions
+            # `reasoning_effort=` form is rejected there (witnessed live).
+            reasoning={"effort": "low"},
         ),
     )
     log_usage("elicitation", None, response, usage)

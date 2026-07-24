@@ -31,11 +31,9 @@ from pydantic import BaseModel
 
 from foundry_agent import models as _models
 from foundry_agent.workflow import (
-    Analyzed,
     Assemble,
     ConversationPause,
     Elicited,
-    Reclarify,
     Run,
 )
 
@@ -45,9 +43,9 @@ logger = logging.getLogger(__name__)
 def _model_type_names() -> tuple[str, ...]:
     """Every checkpointable structured-output type from :mod:`models`.
 
-    The workflow's state dataclasses nest these (a :class:`Run` carries a
-    :class:`GapReport`, captured values carry a :class:`CaptureStatus`, …), so
-    they must be restorable too. Enumerated from the module so a new model is
+    The workflow's state dataclasses nest these (a :class:`ConversationPause`
+    carries :class:`CapturedValue`s, which carry a :class:`CaptureStatus`, …),
+    so they must be restorable too. Enumerated from the module so a new model is
     covered automatically.
     """
     return tuple(
@@ -62,7 +60,7 @@ def _model_type_names() -> tuple[str, ...]:
 #: Every workflow message/state dataclass that can land in a checkpoint, plus
 #: the structured-output types they nest, in ``"module:qualname"`` form.
 #: Derived from the classes themselves so a rename cannot silently drop one.
-_STATE_TYPES = (Run, Analyzed, Elicited, Reclarify, Assemble, ConversationPause)
+_STATE_TYPES = (Run, Elicited, Assemble, ConversationPause)
 WORKFLOW_CHECKPOINT_TYPE_NAMES: tuple[str, ...] = (
     *(f"{cls.__module__}:{cls.__qualname__}" for cls in _STATE_TYPES),
     *_model_type_names(),

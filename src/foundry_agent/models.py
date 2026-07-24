@@ -32,69 +32,12 @@ class CaptureStatus(str, Enum):
     SKIPPED = "skipped"
 
 
-class AttributeStatus(BaseModel):
-    """The agent's judgment of one reference attribute against the input."""
-
-    attribute_id: str = Field(description="Attribute ID from the format skill, e.g. 'PA7'.")
-    name: str = Field(description="Attribute name as the format skill writes it.")
-    required: bool = Field(
-        description="Whether the format skill marks this attribute as required "
-        "(treat 'Conditional' as required only when its condition applies to this input)."
-    )
-    populated: bool = Field(
-        description="Whether the input substantively populates it — directly stated OR "
-        "reasonably inferable from the content."
-    )
-    inferred_value: str | None = Field(
-        default=None,
-        description="The concrete current value for this attribute (short) — whether "
-        "explicitly stated, previously recorded/confirmed, or inferred. ALWAYS set for "
-        "every populated attribute so the user can review it.",
-    )
-    evidence: str | None = Field(
-        default=None, description="Short quote from the input the judgment rests on."
-    )
-    gap: str | None = Field(
-        default=None, description="What is missing or insufficient, when not populated."
-    )
-
-
 class Finding(BaseModel):
     """An advisory quality finding against a characteristic (PC) or rule (PR)."""
 
     reference_id: str = Field(description="Characteristic or rule ID, e.g. 'PC5' or 'PR8'.")
     severity: Severity = Field(default=Severity.ADVISORY)
     summary: str = Field(description="One-sentence statement of the issue.")
-
-
-class GapReport(BaseModel):
-    """Gap Analysis output: attribute coverage plus advisory findings, one pass over the whole document."""
-
-    classification: str = Field(
-        description="Governance, Operational, Security, or Compliance — the agent's judgment per the "
-        "format skill's definitions."
-    )
-    attributes: list[AttributeStatus] = Field(
-        description="One entry per attribute across every discovered group, in the "
-        "groups' declared order."
-    )
-    findings: list[Finding] = Field(default_factory=list)
-
-    def missing_required(self) -> list[AttributeStatus]:
-        """Attributes the agent judged required but not populated (blocking gaps)."""
-        return [a for a in self.attributes if a.required and not a.populated]
-
-    def inferred_entries(self) -> list[AttributeStatus]:
-        """Populated attributes with their current values — shown for user review."""
-        return [a for a in self.attributes if a.populated and a.inferred_value]
-
-    def needs_user_input(self) -> bool:
-        """Whether anything must be confirmed or asked before the document can be judged.
-
-        Inferred values count: elicitation EL13 has the user review what was
-        read out of their input rather than being asked for it again.
-        """
-        return bool(self.missing_required() or self.inferred_entries())
 
 
 class ValidationResult(BaseModel):
@@ -121,29 +64,28 @@ class CapturedValue(BaseModel):
 
 
 class ConversationTurn(BaseModel):
-    """One turn of the whole-document, agent-paced elicitation conversation.
+    """One turn of the CURRENT field group's elicitation conversation.
 
-    The unit the batched conversation runs on: the agent is re-run with the
-    user's reply on the same session until it sets ``conversation_complete``.
-    The conversation spans every group the interview discovered — the agent,
-    not the workflow, decides how many related fields to raise per turn
-    (elicitation EL4).
+    The agent is re-run with the user's reply on the same session until it sets
+    ``conversation_complete`` for the group in hand (elicitation EL4); the
+    interview then advances to the next group. A turn clarifies only the current
+    group's points, in plain language, never attribute IDs.
     """
 
     message: str = Field(
-        description="The user-facing text for this turn — a small, related cluster of "
-        "open fields the agent chose to raise together, guided by the elicitation "
-        "skill's cadence. Plain stakeholder language — never attribute IDs, group "
-        "codes, or rule IDs."
+        description="The user-facing text for this turn — a natural, plain-language "
+        "message clarifying the CURRENT field group's points: confirming what was "
+        "inferred from the content and asking for what is missing, guided by the "
+        "elicitation skill (EL4/EL14). Never attribute IDs, group codes, or rule IDs."
     )
     conversation_complete: bool = Field(
-        description="True ONLY when every compulsory attribute across every group is "
-        "captured adequately or recorded unresolved — never merely because the user "
-        "replied."
+        description="True ONLY when THIS group's Adequacy is satisfied or its open "
+        "points are recorded unresolved — the signal to advance to the next group. "
+        "Never merely because the user replied."
     )
     captured: list[CapturedValue] = Field(
         default_factory=list,
-        description="Every value captured so far in this conversation, cumulative — "
+        description="Every value captured for this group so far, cumulative — "
         "resend values from earlier turns, do not send only the latest.",
     )
 

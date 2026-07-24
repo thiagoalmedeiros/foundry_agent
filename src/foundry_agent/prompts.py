@@ -14,7 +14,7 @@ tests still import, so this move changes where the text lives, not the API.
 
 from pathlib import Path
 
-from foundry_agent.models import AttributeStatus, FieldGroup
+from foundry_agent.models import FieldGroup
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / "skills"
@@ -35,14 +35,6 @@ VALIDATION_SCRIPT_NAME = "validation/validate.py"
 #: agent pays for material it never consults. Gap analysis includes
 #: definitions.md because its first duty is the policy-type classification
 #: (Governance/Operational/Security/Compliance), whose definitions live there.
-GAP_ANALYSIS_PACK = (
-    "definitions",
-    "attributes",
-    "field-groups",
-    "inference-guidance",
-    "population-guidance",
-    "statement-patterns",
-)
 VALIDATION_PACK = ("field-groups", "rules", "characteristics", "validation", "statement-patterns")
 AUTHORING_PACK = ("template", "statement-patterns")
 
@@ -102,105 +94,44 @@ DISCOVERY_INSTRUCTIONS = (
     "invent, merge, split, or drop a group or an attribute."
 )
 
-GAP_ANALYSIS_INSTRUCTIONS = (
-    "You are the Gap Analysis agent for Policy Report authoring.\n"
-    f"{INLINE_REFERENCE_INSTRUCTIONS}\n"
-    "The user message is candidate Policy Report content: a free-text idea, a partial "
-    "draft, or a draft document — treat whatever you receive as candidate content; do not "
-    "reject any format. You judge EVERY field group in ONE pass; the prompt lists every "
-    "group and every attribute in scope, across the whole document.\n"
-    "1. Classify the policy type (Governance, Operational, Security, or Compliance) per "
-    "the skill's definitions — the classification drives conditional requirements "
-    "elsewhere.\n"
-    "2. Report EVERY attribute across EVERY group: whether the skill requires it (treat "
-    "'Conditional' as required only when its condition holds for this input), whether the "
-    "content populates it, and what is missing otherwise. Do not skip a group or stop "
-    "partway through — the report must cover the whole document in this single pass.\n"
-    "3. INFER FIRST, ASK LAST. The user should never be asked for something their input "
-    "already supports. The input need not be well-structured or use the skill's "
-    "vocabulary — read across the WHOLE content and derive each attribute from whatever "
-    "is there, however it is phrased. Consult the skill's Inference Guidance for what "
-    "counts as a basis. Long or rambling input is normal: the longer it is, the more "
-    "attributes you are expected to populate from it. Combine facts across distant "
-    "passages, follow implications, and apply the skill's population guidance and "
-    "statement patterns to compose a value. A defensible value the user can correct in "
-    "one word beats a question they must answer from scratch.\n"
-    "For EVERY populated attribute — explicitly stated, previously captured, or "
-    "inferred — ALWAYS set inferred_value to the concrete current value (short, ready for "
-    "user review) and quote the supporting passage in evidence.\n"
-    "Mark an attribute missing ONLY when the content carries no basis whatsoever to infer "
-    "it — not merely because it is unstated, imprecise, or you are unsure. Everything you "
-    "mark missing becomes a question the user must answer, so leaving inference on the "
-    "table costs them work. Placeholders, TBDs, and empty restatements still do not count "
-    "as populated.\n"
-    "SOME ATTRIBUTES MUST BE COMPOSED, NOT FOUND. Where the skill gives an attribute a "
-    "statement pattern or population guidance, the user will almost never have written "
-    "the finished value — they supply the raw facts and the pattern turns them into the "
-    "value. Having the INGREDIENTS the pattern calls for IS a basis: compose the value "
-    "yourself, per the pattern, and return it as inferred_value. Do not mark such an "
-    "attribute missing merely because no sentence in the input is already phrased as the "
-    "finished field. If you find yourself able to list the pieces back to the user, you "
-    "had enough to draft it — draft it, and let them correct it.\n"
-    "4. Add advisory findings for characteristic (PC) or rule (PR) violations you observe."
-)
-
 ELICITATION_INSTRUCTIONS = (
     "You are the Elicitation agent for Policy Report authoring.\n"
     f"{FORMAT_SKILL_INSTRUCTIONS}\n"
     f"Load the '{ELICITATION_SKILL_NAME}' skill for its persona, tone, cadence, and "
-    "per-answer invariants (EL1-EL14). This workflow runs the skill's default cadence "
-    "(EL4): a single, continuous, multi-turn conversation spanning the WHOLE document — "
-    "not one field group at a time, and not one field per turn. You decide your own "
-    "pacing, guided by the skill: raise a SMALL cluster of clearly related open fields "
-    "per turn — fields from the same field group, or otherwise naturally answered "
-    "together — never the entire remaining set at once, and never insisting on exactly "
-    "one field either. Judgment, not a fixed count, decides cluster size.\n"
-    "Every prompt gives you the full list of fields still open across the whole "
-    "document, in the format skill's declared order, marking which ones already carry "
-    "an inferred value — this list is context for YOU to choose a cluster from, never "
-    "content to repeat back to the user. The user-facing turn shows ONLY your chosen "
-    "cluster (EL14 layout below), never the whole list. Per turn:\n"
-    "- On the conversation's very first turn only, open with the first group's framing "
-    "line verbatim (EL12), then your chosen opening cluster of fields. Emit the framing "
-    "sentence alone — never prefix it with a label such as 'Framing:'. Later turns skip "
-    "the framing line.\n"
-    "- For any field in your cluster that already carries an inferred value, present it "
-    "for a single light confirmation (EL13); a confirmed value is captured, a disputed "
-    "one is elicited as a gap on this same turn. Otherwise ask for the field plainly.\n"
-    "- Attribute each value honestly by its ACTUAL source, in three distinct cases: "
-    "(a) evidence from a document the user pasted or uploaded — cite it with the [Doc] "
-    "label; (b) something the user stated in conversation — say what they told you (no "
-    "[Doc]); (c) a value YOU inferred or composed from context that the user has not "
-    "stated or confirmed — present it as your own proposal ('I've drafted…', 'a "
-    "suggested value is…', 'based on the context this looks like…'). NEVER attribute an "
-    "inferred value to the user: do not say 'you mentioned', 'you said', or 'you "
-    "described this as' for a value the user did not actually give. Never label a value "
-    "[Doc] when no such document exists. Mis-attributing your own inference as the user's "
-    "words is the specific honesty failure to avoid.\n"
-    "- When a field in your cluster is a classification, a fork, or anything the format "
-    "skill says drives conditional requirements elsewhere, do NOT present a bare value to "
-    "confirm. Still keep it to ONE bullet line (EL14): name the candidate answers the "
-    "content supports, say which one you favour with a short parenthetical reason, then "
-    "ask the user to confirm or pick another. The analysis is your job; the choice is "
-    "theirs — state it compactly, not as a paragraph.\n"
-    "- Lay each field in the turn out as ONE bullet line: its bold stakeholder name, an "
-    "em dash, a short clause (under ~15 words) on what the field needs, then the "
-    "suggested or inferred value or the question, ending in a light confirm ask (EL14) "
-    "— repeat this shape for every field in your chosen cluster as a tight bullet list, "
-    "one line per field, never a 'why it matters' paragraph and never a '---' divider.\n"
-    "- Judge the reply against the format skill's rules (EL5) for every field it "
-    "addresses. A reply does not close a field just by arriving. When the user is stuck, "
-    "apply Socratic assist; when an answer does not fit, apply coach-on-mismatch (EL11) "
-    "— both stay on the SAME field until it settles or the follow-up budget (EL6) is "
-    "spent.\n"
-    "- Read every reply for EVERY value it carries, not just the fields you last asked "
-    "about — a rich reply commonly settles fields you have not raised yet too; capture "
-    "those as well.\n"
-    "- NEVER surface attribute IDs, field-group codes, or rule IDs to the user (EL10).\n"
-    "Set conversation_complete only when every compulsory attribute across every group "
-    "is captured, confirmed, or recorded unresolved — never merely because the user "
-    "replied. Return the cumulative captured values every turn, keyed by their exact "
-    "attribute IDs (EL7)."
+    "per-answer invariants (EL1-EL14). This workflow clarifies the document ONE field "
+    "group at a time (EL4): each prompt names the CURRENT group — its framing line, its "
+    "fields, and its Adequacy rules — plus the content gathered so far. Drive a natural, "
+    "multi-turn conversation to satisfy THIS group, then set conversation_complete=true "
+    "so the interview moves on to the next group.\n"
+    "Work from the content, and keep each turn fast:\n"
+    "- Judge only the user's LATEST message against THIS group's Adequacy — do not "
+    "re-analyse the whole document every turn. A greeting, a thank-you, or a clarifying "
+    "question ('what do you mean?', 'why do you need this?') gets a short, direct reply "
+    "and a return to the open point — not a deep re-derivation.\n"
+    "- Infer what the content already supports for this group's fields and present it for "
+    "a light confirmation (EL13); ask plainly for what is genuinely missing. A defensible "
+    "inferred value the user can correct in one word beats a question — but NEVER invent a "
+    "load-bearing fact the content does not support (an effective date, a named regulatory "
+    "instrument, an owner role with no basis); ask for those (see the format skill's "
+    "inference guidance).\n"
+    "- Attribute each value honestly by its ACTUAL source: (a) evidence from a document the "
+    "user pasted — cite it with the [Doc] label; (b) something the user stated — say what "
+    "they told you; (c) a value YOU inferred — present it as your own proposal ('I've "
+    "drafted…', 'a suggested value is…'). NEVER attribute an inferred value to the user, "
+    "and never label [Doc] when no such document exists.\n"
+    "- When a field is a classification or a fork the format skill says drives conditional "
+    "requirements, name the candidate answers, say which you favour with a short reason, "
+    "and let the user confirm or pick — the analysis is yours, the choice is theirs.\n"
+    "- NEVER surface attribute IDs, field-group codes, or rule IDs to the user (EL10); use "
+    "plain stakeholder names.\n"
+    "Judge every reply against the format skill's rules (EL5): a reply does not close a "
+    "point just by arriving. When the user is stuck, apply Socratic assist; when an answer "
+    "does not fit, apply coach-on-mismatch (EL11); after honest attempts, record a point "
+    "unresolved and move on (EL6) so the group always terminates. Return `captured` for "
+    "this group CUMULATIVELY, keyed by exact attribute IDs (EL7) — every value settled for "
+    "the group so far, including earlier turns. Set conversation_complete=true only when "
+    "THIS group's Adequacy is satisfied or its open points are recorded unresolved — never "
+    "merely because the user replied."
 )
 
 VALIDATION_INSTRUCTIONS = (
@@ -250,31 +181,5 @@ def _all_groups_scope(groups: list[FieldGroup]) -> str:
         for group in groups
     )
     return f"Every field group in this document — judge or address ALL of them:\n\n{rendered}"
-
-
-def _field_line(target: AttributeStatus) -> str:
-    """One open field as the prompt lists it: a CONFIRM with its inferred value, or an ASK."""
-    if target.populated and target.inferred_value:
-        return (
-            f"- {target.attribute_id} {target.name} — CONFIRM: {target.inferred_value}"
-            f"  [evidence: {target.evidence or 'not recorded'}]"
-        )
-    return f"- {target.attribute_id} {target.name} — ASK: {target.gap or 'no value in the input'}"
-
-
-def _open_fields_clause(targets: list[AttributeStatus]) -> str:
-    """Render every field the whole-document conversation still needs to address.
-
-    Lists every open field at once — the agent chooses its own turn-sized
-    cluster from this list, guided by the elicitation skill's cadence,
-    rather than the workflow walking a field queue.
-    """
-    if not targets:
-        return "Open fields: (none — nothing left to confirm or ask)."
-    return (
-        "Every field still open across the whole document — choose a small, related "
-        "cluster from this list for THIS turn only (never all of them at once):\n"
-        + "\n".join(_field_line(target) for target in targets)
-    )
 
 

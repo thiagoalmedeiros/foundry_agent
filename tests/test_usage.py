@@ -4,9 +4,9 @@ import logging
 
 import pytest
 
-from foundry_agent.agents import analyze_gaps, create_gap_analysis_agent
+from foundry_agent.agents import create_elicitation_agent, open_group_conversation
 from foundry_agent.usage import RunUsage, UsageRecord, log_usage
-from tests.conftest import GROUPS, TWO_GAP_REPORT
+from tests.conftest import GROUPS, OPEN_TURN
 
 
 class _Response:
@@ -74,15 +74,14 @@ def test_run_usage_summary_totals_per_stage_and_overall():
     assert "total: calls=3 input=350 cached=10 output=450" in summary
 
 
-async def test_analyze_gaps_records_usage_for_its_stage(make_stub_client, caplog):
-    """The agent glue logs every call, even when the stub reports no counts."""
-    client = make_stub_client(TWO_GAP_REPORT)
-    agent = create_gap_analysis_agent(client)
+async def test_elicitation_turn_records_usage_for_its_stage(make_stub_client, caplog):
+    """The agent glue logs every elicitation call, even when the stub reports no counts."""
+    client = make_stub_client(OPEN_TURN)
+    agent = create_elicitation_agent(client)
     usage = RunUsage()
 
     with caplog.at_level(logging.INFO, logger="foundry_agent.usage"):
-        await analyze_gaps(agent, "any input", GROUPS.groups, usage=usage)
+        await open_group_conversation(agent, agent.create_session(), GROUPS.groups[0], "x", usage)
 
-    # analysis is now a single global pass — no group_id, unlike a per-group call.
-    assert [(r.stage, r.group_id) for r in usage.records] == [("analysis", None)]
-    assert "usage stage=analysis group=-" in caplog.text
+    assert [(r.stage, r.group_id) for r in usage.records] == [("elicitation", None)]
+    assert "usage stage=elicitation group=-" in caplog.text

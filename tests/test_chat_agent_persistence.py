@@ -15,7 +15,6 @@ a continuation prompt, not the opening one.
 from foundry_agent.agents import (
     create_authoring_agent,
     create_elicitation_agent,
-    create_gap_analysis_agent,
     create_validation_agent,
 )
 from foundry_agent.chat_agent import ERROR_REPLY_PREFIX, WorkflowChatAgent
@@ -27,7 +26,6 @@ from tests.conftest import (
     GROUPS,
     OPEN_TURN,
     STUB_DOCUMENT,
-    TWO_GAP_REPORT,
 )
 
 
@@ -47,18 +45,16 @@ def _make_agent(
 ):
     """A chat agent over a shared checkpoint root, exposing each conversation's clients.
 
-    ``clients`` collects one ``{"gap": ..., "elicitation": ...}`` dict per
+    ``clients`` collects one ``{"elicitation": ...}`` dict per
     factory call (one call per conversation), so a test can assert which
     stages actually ran — the discriminator between a resume and a restart.
     """
     clients: list[dict] = []
 
     def factory():
-        gap_client = make_stub_client(TWO_GAP_REPORT)
         elicitation_client = make_elicitation_client(*turns)
-        clients.append({"gap": gap_client, "elicitation": elicitation_client})
+        clients.append({"elicitation": elicitation_client})
         return build_policy_report_workflow(
-            gap_agent=create_gap_analysis_agent(gap_client),
             elicitation_agent=create_elicitation_agent(elicitation_client),
             validation_agent=create_validation_agent(make_stub_client(COMPLETE_VALIDATION)),
             authoring_agent=create_authoring_agent(make_stub_client(None, text=STUB_DOCUMENT)),
@@ -89,12 +85,8 @@ async def test_resumes_after_restart(make_stub_client, make_elicitation_client, 
     reply = await _say(second, "Remote Work Security Policy, type Security")
 
     assert reply == STUB_DOCUMENT, "the resumed run should close and produce the document"
-    assert clients[0]["gap"].calls == 0, (
-        "gap analysis must NOT re-run on resume — its report is restored state; "
-        "a re-run means the interview restarted instead of resuming"
-    )
     assert "The user replied" in clients[0]["elicitation"].prompts[0], (
-        "the resumed turn must be a continuation prompt, not the opening framing"
+        "the resumed turn must be a continuation prompt, not a fresh group opening"
     )
 
 
@@ -112,8 +104,8 @@ async def test_conversations_are_isolated(make_stub_client, make_elicitation_cli
     assert await _say(second, "everything you need", session="alice") == STUB_DOCUMENT
     assert await _say(second, "everything you need", session="bob") == STUB_DOCUMENT
     assert len(clients) == 2, "each conversation restores through its own workflow"
-    assert all(entry["gap"].calls == 0 for entry in clients), (
-        "neither conversation may re-run analysis on resume"
+    assert all("The user replied" in entry["elicitation"].prompts[0] for entry in clients), (
+        "each conversation must resume as a continuation, not a fresh opening"
     )
 
 
@@ -129,7 +121,6 @@ async def test_error_clears_checkpoint(make_stub_client, make_elicitation_client
         elicitation_client = make_stub_client(OPEN_TURN)
         elicitation_client.queue({"not": "a ConversationTurn"})  # second turn blows up parsing
         return build_policy_report_workflow(
-            gap_agent=create_gap_analysis_agent(make_stub_client(TWO_GAP_REPORT)),
             elicitation_agent=create_elicitation_agent(elicitation_client),
             validation_agent=create_validation_agent(make_stub_client(COMPLETE_VALIDATION)),
             authoring_agent=create_authoring_agent(make_stub_client(None, text=STUB_DOCUMENT)),
@@ -150,4 +141,6 @@ async def test_error_clears_checkpoint(make_stub_client, make_elicitation_client
     # And the next process starts FRESH — the opening framing, not a resume.
     fresh, clients = _make_agent(make_stub_client, make_elicitation_client, root)
     assert "Anchors what this policy is" in await _say(fresh, "hi")
-    assert clients[0]["gap"].calls == 1, "a fresh start runs analysis again"
+    assert "Field group to clarify now" in clients[0]["elicitation"].prompts[0], (
+        "a fresh start opens the first group, not a resume"
+    )

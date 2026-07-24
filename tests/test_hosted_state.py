@@ -19,7 +19,6 @@ from agent_framework_foundry_hosting import ResponsesHostServer
 from foundry_agent.agents import (
     create_authoring_agent,
     create_elicitation_agent,
-    create_gap_analysis_agent,
     create_validation_agent,
 )
 from foundry_agent.workflow import build_policy_report_workflow
@@ -29,13 +28,11 @@ from tests.conftest import (
     GROUPS,
     OPEN_TURN,
     STUB_DOCUMENT,
-    TWO_GAP_REPORT,
 )
 
 
 def _workflow(make_stub_client, make_elicitation_client):
     return build_policy_report_workflow(
-        gap_agent=create_gap_analysis_agent(make_stub_client(TWO_GAP_REPORT)),
         elicitation_agent=create_elicitation_agent(
             make_elicitation_client(OPEN_TURN, CLOSING_TURN)
         ),

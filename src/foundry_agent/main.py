@@ -21,7 +21,7 @@ from agent_framework.devui import serve
 from dotenv import load_dotenv
 
 from foundry_agent.chat_agent import WorkflowChatAgent
-from foundry_agent.workflow import create_policy_report_workflow
+from foundry_agent.workflow import DiscoveryCache, create_policy_report_workflow
 
 DEVUI_PORT = 8090
 
@@ -34,9 +34,17 @@ AGENT_DESCRIPTION = (
 
 
 def create_policy_report_agent() -> WorkflowChatAgent:
-    """Wrap the workflow as the chat agent DevUI hosts."""
+    """Wrap the workflow as the chat agent DevUI hosts.
+
+    DevUI builds a fresh workflow per conversation (via the factory), so one
+    shared :class:`DiscoveryCache` is bound here — above the factory — to keep
+    the discovery memo spanning conversations instead of resetting each time.
+    """
+    cache = DiscoveryCache()
     return WorkflowChatAgent(
-        create_policy_report_workflow, name=AGENT_NAME, description=AGENT_DESCRIPTION
+        lambda: create_policy_report_workflow(discovery_cache=cache),
+        name=AGENT_NAME,
+        description=AGENT_DESCRIPTION,
     )
 
 
@@ -85,7 +93,16 @@ def _prepare_instrumentation() -> bool:
 
 
 def main() -> None:
-    """Serve the Policy Report workflow in DevUI."""
+    """Serve the Policy Report workflow in DevUI.
+
+    Default: the workflow is served as a chat agent (each elicitation pause reads
+    as assistant text). Pass ``--workflow`` to serve the RAW :class:`Workflow`
+    instead — DevUI detects it as a workflow (it has ``executors``) and renders
+    its stage-graph plus a typed human-in-the-loop panel, which is the view for
+    watching how the internal graph executes one executor at a time (discovery →
+    analysis → elicitation → validation → assembler). Both paths need the
+    AZURE_OPENAI_* variables.
+    """
     # Uvicorn only configures its own loggers; without this the package's INFO
     # records — including the per-stage token usage lines the cost work relies
     # on — are silently dropped in the served process.
@@ -106,11 +123,18 @@ def main() -> None:
         default=DEVUI_PORT,
         help=f"Port for the DevUI server (default {DEVUI_PORT}).",
     )
+    parser.add_argument(
+        "--workflow",
+        action="store_true",
+        help="Serve the raw Workflow (DevUI stage-graph + typed HITL panel) instead "
+        "of the chat agent, to inspect how the internal graph executes.",
+    )
     args = parser.parse_args()
+    entity = create_policy_report_workflow() if args.workflow else create_policy_report_agent()
     # auth_enabled=False: DevUI's default dev-token auth 401s the auto-opened
     # browser (it never receives the token); the server binds to 127.0.0.1 only.
     serve(
-        entities=[create_policy_report_agent()],
+        entities=[entity],
         port=args.port,
         auto_open=True,
         auth_enabled=False,

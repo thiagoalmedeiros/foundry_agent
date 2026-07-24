@@ -14,7 +14,6 @@ import foundry_agent.chat_agent
 from foundry_agent.agents import (
     create_authoring_agent,
     create_elicitation_agent,
-    create_gap_analysis_agent,
     create_validation_agent,
 )
 from foundry_agent.chat_agent import ERROR_REPLY_PREFIX, WorkflowChatAgent, _extract_text
@@ -24,11 +23,9 @@ from tests.conftest import (
     COMPLETE_VALIDATION,
     FOLLOW_UP_TURN,
     GROUPS,
-    INFERRED_REPORT,
     INPUT_FILE,
     OPEN_TURN,
     STUB_DOCUMENT,
-    TWO_GAP_REPORT,
 )
 
 
@@ -61,7 +58,6 @@ def _agent(
     make_stub_client,
     make_elicitation_client,
     *,
-    gap_report=TWO_GAP_REPORT,
     turns=(OPEN_TURN, FOLLOW_UP_TURN),
     validation_clients=None,
 ) -> WorkflowChatAgent:
@@ -76,7 +72,6 @@ def _agent(
         if validation_clients is not None:
             validation_clients.append(validation_client)
         return build_policy_report_workflow(
-            gap_agent=create_gap_analysis_agent(make_stub_client(gap_report)),
             elicitation_agent=create_elicitation_agent(make_elicitation_client(*turns)),
             validation_agent=create_validation_agent(validation_client),
             authoring_agent=create_authoring_agent(make_stub_client(None, text=STUB_DOCUMENT)),
@@ -123,7 +118,6 @@ async def test_a_finished_run_returns_the_document_and_frees_the_conversation(
     agent = _agent(
         make_stub_client,
         make_elicitation_client,
-        gap_report=INFERRED_REPORT,
         # One open/close pair — the whole document is one conversation now.
         turns=(OPEN_TURN, CLOSING_TURN),
     )

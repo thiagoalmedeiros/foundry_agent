@@ -16,14 +16,11 @@ import pytest
 from agent_framework import ChatResponse, Message
 
 from foundry_agent.models import (
-    AttributeStatus,
     CapturedValue,
     CaptureStatus,
     ConversationTurn,
     FieldGroup,
     FieldGroups,
-    Finding,
-    GapReport,
     ValidationResult,
 )
 #: The sample assessment a user realistically pastes or uploads mid-conversation.
@@ -52,88 +49,6 @@ GROUPS = FieldGroups(
     ]
 )
 GROUP_COUNT = len(GROUPS.groups)
-
-#: Nothing is inferable — every attribute across every group has to be asked for.
-TWO_GAP_REPORT = GapReport(
-    classification="Security",
-    attributes=[
-        AttributeStatus(
-            attribute_id="PA1",
-            name="Policy ID",
-            required=True,
-            populated=False,
-            gap="No policy ID present.",
-        ),
-        AttributeStatus(
-            attribute_id="PA3",
-            name="Policy Type",
-            required=True,
-            populated=False,
-            gap="No policy type present.",
-        ),
-    ],
-)
-
-#: Everything is inferable — the user confirms, and nothing is asked from scratch.
-INFERRED_REPORT = GapReport(
-    classification="Security",
-    attributes=[
-        AttributeStatus(
-            attribute_id="PA7",
-            name="Purpose Statement",
-            required=True,
-            populated=True,
-            inferred_value="This policy establishes mandatory VPN and device rules for "
-            "remote staff in order to prevent unauthorized access to customer data.",
-            evidence="remote logins are permitted from unmanaged personal devices",
-        ),
-        AttributeStatus(
-            attribute_id="PA11",
-            name="Context Narrative",
-            required=True,
-            populated=True,
-            inferred_value="Flexible work expanded without a security baseline, leaving "
-            "cached customer data exposed on unmanaged devices.",
-            evidence="Three corporate laptops carrying cached customer records were lost",
-        ),
-    ],
-)
-
-#: One attribute readable, one with no basis — the confirm/ask split in one document.
-MIXED_REPORT = GapReport(
-    classification="Security",
-    attributes=[
-        AttributeStatus(
-            attribute_id="PA1",
-            name="Policy ID",
-            required=True,
-            populated=True,
-            inferred_value="POL-SEC-001",
-            evidence="the forthcoming remote-work security policy",
-        ),
-        AttributeStatus(
-            attribute_id="PA3",
-            name="Policy Type",
-            required=True,
-            populated=False,
-            gap="No policy type present.",
-        ),
-    ],
-)
-
-#: No gaps at all — the document goes straight to validation, unasked.
-COMPLETE_REPORT = GapReport(
-    classification="Security",
-    attributes=[
-        AttributeStatus(
-            attribute_id="PA1",
-            name="Policy ID",
-            required=True,
-            populated=True,
-            evidence="POL-SEC-001",
-        )
-    ],
-)
 
 #: The elicitation agent's opening turn: it still holds the floor.
 OPEN_TURN = ConversationTurn(
@@ -177,21 +92,6 @@ INCOMPLETE_VALIDATION = ValidationResult(
     complete=False,
     missing_attribute_ids=["PA3"],
     rationale="Policy type is still not one of Governance/Operational/Security/Compliance.",
-)
-
-#: Round 1: inadequate, and carrying a finding the next round fixes.
-STALE_FINDING_VALIDATION = ValidationResult(
-    complete=False,
-    missing_attribute_ids=["PA3"],
-    advisory_findings=[
-        Finding(reference_id="PR10", summary="PA11 runs past five paragraphs.")
-    ],
-    rationale="PA11 does not satisfy PR10's narrative bounds.",
-)
-
-#: Round 2: the finding is gone because the gap was closed.
-FIXED_VALIDATION = ValidationResult(
-    complete=True, rationale="PA11 is now within the narrative bounds."
 )
 
 STUB_DOCUMENT = "# Policy Report\n" + "\n".join(f"## PA{i} section" for i in range(1, 33))

@@ -35,6 +35,28 @@
             }
         },
         {
+            // Run and Debug → DevUI as a RAW workflow (--workflow): serves the
+            // Workflow itself on :8090, so DevUI renders its stage-graph and a
+            // typed HITL panel instead of the chat wrapper. Use this to watch
+            // the internal graph execute one executor at a time (discovery →
+            // analysis → elicitation → validation → assembler). justMyCode is
+            // false so breakpoints land inside the executors. Needs
+            // AZURE_OPENAI_* (loaded from .env); start `task sim:up` (Aspire at
+            // :18888) or the AI Toolkit tracing view first so :4318 is listening.
+            "name": "DevUI workflow graph (:8090, raw Workflow, OTel → :4318)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "foundry_agent.main",
+            "args": ["--workflow"],
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+                "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"
+            }
+        },
+        {
             "name": "Hosted agent + Foundry Toolkit visualizer (OTLP :4319)",
             "type": "debugpy",
             "request": "launch",

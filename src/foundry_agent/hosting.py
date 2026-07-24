@@ -64,7 +64,7 @@ from dotenv import load_dotenv
 
 from foundry_agent.chat_agent import WorkflowChatAgent
 from foundry_agent.checkpoint_compat import install_checkpoint_type_allowlist
-from foundry_agent.workflow import create_policy_report_workflow
+from foundry_agent.workflow import DiscoveryCache, create_policy_report_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +90,10 @@ def create_hosted_agent() -> WorkflowAgent:
         KeyError: A required AZURE_OPENAI_* variable is unset (from the
             workflow's chat-client factory).
     """
+    # No explicit DiscoveryCache is bound here on purpose: workflow mode builds
+    # the workflow once, so create_policy_report_workflow's own auto-created
+    # cache already lives for the whole process. Only the chat paths, which
+    # rebuild per conversation, need a cache bound above the factory.
     return WorkflowAgent(
         create_policy_report_workflow(),
         name=AGENT_NAME,
@@ -103,10 +107,15 @@ def create_hosted_chat_agent() -> WorkflowChatAgent:
     See the module docstring's **Chat mode** section: playground-style UIs
     render assistant text only, so the ``request_info`` protocol reads as an
     empty reply there. The wrapper takes the workflow *factory* — a fresh
-    workflow per conversation, constructed lazily on the first turn.
+    workflow per conversation, constructed lazily on the first turn — so one
+    shared :class:`DiscoveryCache` is bound here, above the factory, to keep the
+    discovery memo spanning conversations rather than resetting each one.
     """
+    cache = DiscoveryCache()
     return WorkflowChatAgent(
-        create_policy_report_workflow, name=AGENT_NAME, description=AGENT_DESCRIPTION
+        lambda: create_policy_report_workflow(discovery_cache=cache),
+        name=AGENT_NAME,
+        description=AGENT_DESCRIPTION,
     )
 
 

@@ -1,14 +1,14 @@
 """The Policy Report format lives in skill files — reaching agents two ways, never in code.
 
 The elicitation agent keeps MAF progressive disclosure (its multi-turn session
-amortizes what it loads). The stateless agents — gap analysis, validation,
-authoring — carry a per-agent reference pack inlined verbatim from the same
-skill files at construction time (the predecessor project's recorded
-progressive-disclosure evaluation led here). Validation additionally mounts
-the format skill's provider — not for disclosure, but so the native
-``run_skill_script`` tool can execute the skill's own validation script.
-These tests pin the mounts, that each pack is tailored and verbatim from the
-live files, and that no agent restates domain knowledge in code.
+amortizes what it loads). The stateless agents — validation and authoring —
+carry a per-agent reference pack inlined verbatim from the same skill files at
+construction time (the predecessor project's recorded progressive-disclosure
+evaluation led here). Validation additionally mounts the format skill's provider
+— not for disclosure, but so the native ``run_skill_script`` tool can execute
+the skill's own validation script. These tests pin the mounts, that each pack is
+tailored and verbatim from the live files, and that no agent restates domain
+knowledge in code.
 """
 
 import pytest
@@ -20,19 +20,15 @@ from foundry_agent.agents import (
     ELICITATION_SKILL_NAME,
     FORMAT_SKILL_DIR,
     FORMAT_SKILL_NAME,
-    GAP_ANALYSIS_PACK,
     REFERENCES_DIR,
     VALIDATION_PACK,
-    analyze_gaps,
     create_authoring_agent,
     create_elicitation_agent,
-    create_gap_analysis_agent,
     create_validation_agent,
 )
-from tests.conftest import COMPLETE_REPORT, GROUPS
+from tests.conftest import GROUPS
 
 STATELESS = [
-    (create_gap_analysis_agent, GAP_ANALYSIS_PACK),
     (create_validation_agent, VALIDATION_PACK),
     (create_authoring_agent, AUTHORING_PACK),
 ]
@@ -72,9 +68,7 @@ async def test_the_elicitation_agent_keeps_progressive_disclosure(make_stub_clie
     assert "read_skill_resource" in tool_names
 
 
-@pytest.mark.parametrize(
-    ("factory", "pack"), STATELESS, ids=["gap-analysis", "validation", "authoring"]
-)
+@pytest.mark.parametrize(("factory", "pack"), STATELESS, ids=["validation", "authoring"])
 async def test_stateless_agents_carry_their_pack_verbatim(make_stub_client, factory, pack):
     """Each pack file's live content is inlined whole — content, not paraphrase."""
     client = make_stub_client(GROUPS)
@@ -87,16 +81,11 @@ async def test_stateless_agents_carry_their_pack_verbatim(make_stub_client, fact
         assert live in instructions, f"{name}.md not inlined verbatim"
 
 
-@pytest.mark.parametrize(
-    "factory",
-    [create_gap_analysis_agent, create_authoring_agent],
-    ids=["gap-analysis", "authoring"],
-)
-async def test_pack_only_agents_carry_no_skill_tools(make_stub_client, factory):
-    """The disclosure tool loop is gone for gap analysis and authoring — the measured cost."""
+async def test_the_authoring_agent_carries_no_skill_tools(make_stub_client):
+    """The disclosure tool loop is gone for authoring — the measured cost."""
     client = make_stub_client(GROUPS)
 
-    await _run_once(factory(client))
+    await _run_once(create_authoring_agent(client))
 
     tool_names = {
         getattr(tool, "name", str(tool)) for tool in client.options.get("tools") or []
@@ -118,25 +107,22 @@ async def test_the_validation_agent_mounts_the_provider_for_its_script(make_stub
 
 def test_packs_are_tailored_not_one_blob():
     """No agent pays for material it never consults."""
-    assert "inference-guidance" in GAP_ANALYSIS_PACK
-    assert "inference-guidance" not in VALIDATION_PACK
-    assert "inference-guidance" not in AUTHORING_PACK
     assert "template" in AUTHORING_PACK
-    assert "template" not in GAP_ANALYSIS_PACK
+    assert "template" not in VALIDATION_PACK
     assert "rules" in VALIDATION_PACK
     assert "rules" not in AUTHORING_PACK
 
 
 async def test_only_the_elicitation_agent_carries_the_behavior_skill(make_stub_client):
-    """The question loop belongs to elicitation; the other agents must not see it."""
+    """The question loop belongs to elicitation; the stateless agents must not see it."""
     elicit_client = make_stub_client(GROUPS)
-    gap_client = make_stub_client(COMPLETE_REPORT)
+    validation_client = make_stub_client(GROUPS)
 
     await _run_once(create_elicitation_agent(elicit_client))
-    await analyze_gaps(create_gap_analysis_agent(gap_client), "any input", GROUPS.groups)
+    await _run_once(create_validation_agent(validation_client))
 
     assert ELICITATION_SKILL_NAME in elicit_client.options["instructions"]
-    assert ELICITATION_SKILL_NAME not in gap_client.options["instructions"]
+    assert ELICITATION_SKILL_NAME not in validation_client.options["instructions"]
 
 
 async def test_the_elicitation_agent_does_not_hardcode_attribute_definitions(

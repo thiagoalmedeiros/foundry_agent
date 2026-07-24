@@ -11,20 +11,21 @@ _FAKE_ENV = {
 }
 
 
-def test_create_policy_report_workflow_builds_all_five_stages(monkeypatch):
+def test_create_policy_report_workflow_builds_all_stages(monkeypatch):
     for key, value in _FAKE_ENV.items():
         monkeypatch.setenv(key, value)
 
     workflow = create_policy_report_workflow()
 
     assert workflow.name == "policy-report-agent"
+    # No gap-analysis stage: discovery hands straight to elicitation.
     assert {
         "discovery",
-        "analysis",
         "elicitation",
         "validation",
         "assembler",
     } <= set(workflow.executors)
+    assert "analysis" not in set(workflow.executors)
 
 
 def test_devui_entrypoint_serves_the_workflow_as_a_chat_agent(monkeypatch):
@@ -38,6 +39,27 @@ def test_devui_entrypoint_serves_the_workflow_as_a_chat_agent(monkeypatch):
     assert agent.name == "policy-report-agent"
     assert callable(main.main)
     assert main.DEVUI_PORT == 8090
+
+
+def test_devui_entrypoint_binds_one_shared_discovery_cache(monkeypatch):
+    """DevUI rebuilds the workflow per conversation, so it binds one cache above
+    the factory — the discovery memo must span conversations, not reset each one."""
+    from foundry_agent import main
+
+    seen: list[object] = []
+
+    def _recording_factory(discovery_cache=None):
+        seen.append(discovery_cache)
+        return object()  # a stand-in workflow; the wrapper only stores the factory
+
+    monkeypatch.setattr(main, "create_policy_report_workflow", _recording_factory)
+
+    factory = main.create_policy_report_agent()._workflow_factory
+    factory()
+    factory()
+
+    assert seen[0] is not None, "the factory must receive a DiscoveryCache, not None"
+    assert seen[0] is seen[1], "both conversations must share the same cache instance"
 
 
 def test_devui_instrumentation_requires_a_listening_collector(monkeypatch):

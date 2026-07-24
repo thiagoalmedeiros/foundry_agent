@@ -18,7 +18,6 @@ from agent_framework_foundry_hosting import ResponsesHostServer
 from foundry_agent.agents import (
     create_authoring_agent,
     create_elicitation_agent,
-    create_gap_analysis_agent,
     create_validation_agent,
 )
 from foundry_agent.chat_agent import WorkflowChatAgent
@@ -30,7 +29,6 @@ from tests.conftest import (
     GROUPS,
     OPEN_TURN,
     STUB_DOCUMENT,
-    TWO_GAP_REPORT,
 )
 
 _FAKE_ENV = {
@@ -43,7 +41,6 @@ _FAKE_ENV = {
 def _stub_workflow(make_stub_client, make_elicitation_client):
     """The real workflow graph over stubbed chat clients."""
     return build_policy_report_workflow(
-        gap_agent=create_gap_analysis_agent(make_stub_client(TWO_GAP_REPORT)),
         elicitation_agent=create_elicitation_agent(
             make_elicitation_client(OPEN_TURN, CLOSING_TURN)
         ),
@@ -71,6 +68,27 @@ def test_create_hosted_chat_agent_wraps_the_factory_lazily():
 
     assert isinstance(agent, WorkflowChatAgent)
     assert agent.name == AGENT_NAME
+
+
+def test_hosted_chat_agent_binds_one_shared_discovery_cache(monkeypatch):
+    """Chat mode rebuilds the workflow per conversation, so one cache is bound above
+    the factory — workflow mode needs none (it builds once, see create_hosted_agent)."""
+    import foundry_agent.hosting as hosting
+
+    seen: list[object] = []
+
+    def _recording_factory(discovery_cache=None):
+        seen.append(discovery_cache)
+        return object()  # a stand-in workflow; the wrapper only stores the factory
+
+    monkeypatch.setattr(hosting, "create_policy_report_workflow", _recording_factory)
+
+    factory = create_hosted_chat_agent()._workflow_factory
+    factory()
+    factory()
+
+    assert seen[0] is not None, "the factory must receive a DiscoveryCache, not None"
+    assert seen[0] is seen[1], "both conversations must share the same cache instance"
 
 
 def test_the_host_accepts_the_chat_agent():

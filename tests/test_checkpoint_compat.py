@@ -22,9 +22,8 @@ def test_type_names_cover_every_witnessed_blocked_type():
     """Both rounds of witnessed blocks: state dataclasses and nested models."""
     for name in (
         "foundry_agent.workflow:Run",
-        "foundry_agent.workflow:Analyzed",
         "foundry_agent.workflow:ConversationPause",
-        "foundry_agent.models:GapReport",
+        "foundry_agent.models:CapturedValue",
         "foundry_agent.models:CaptureStatus",
     ):
         assert name in WORKFLOW_CHECKPOINT_TYPE_NAMES
@@ -64,14 +63,15 @@ def test_install_is_idempotent(monkeypatch, tmp_path):
 
 
 def test_legacy_run_payload_with_removed_field_still_restores():
-    """A Run checkpointed before ``elicitation_turns`` was removed must decode.
+    """A Run checkpointed before ``validation_rounds`` was removed must decode.
 
     Checkpoints pickle state dataclasses (state dict, no ``__init__`` call), so
     an old payload carries the removed field as a stray attribute. It must
-    restore cleanly and the stray must not shadow any live field.
+    restore cleanly and the stray must not shadow any live field — which is
+    what makes single-pass validation's field removal safe across a restart.
     """
     legacy = Run(content="doc")
-    legacy.__dict__["elicitation_turns"] = 3  # as an old pickle's state dict has it
+    legacy.__dict__["validation_rounds"] = 3  # a removed field, as an old pickle carries it
 
     restored = decode_checkpoint_value(
         encode_checkpoint_value(legacy),
@@ -80,7 +80,7 @@ def test_legacy_run_payload_with_removed_field_still_restores():
 
     assert isinstance(restored, Run)
     assert restored.content == "doc"
-    assert restored.validation_rounds == 1
+    assert restored.unresolved_ids == []  # a live field decoded to its default
 
 
 def test_install_degrades_gracefully_if_the_seam_is_gone(monkeypatch, caplog):

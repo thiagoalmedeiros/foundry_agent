@@ -1,78 +1,37 @@
-"""The elicitation agent runs ONE whole-document conversation, agent-paced.
+"""The elicitation agent clarifies ONE field group at a time.
 
-The workflow hands over every open field across every discovered group at
-once and the agent — guided by the elicitation skill's cadence (EL4) —
-decides how many related fields to raise per turn.
+Discovery hands the groups straight to elicitation (there is no gap-analysis
+stage); for each group the agent drives a natural multi-turn conversation
+against that group's Adequacy, then the flow jumps to the next group.
 """
 
 import logging
 
 from foundry_agent.agents import (
+    ELICITATION_INSTRUCTIONS,
     ELICITATION_SKILL_NAME,
     FORMAT_SKILL_NAME,
-    continue_elicitation_conversation,
+    continue_group_conversation,
     create_elicitation_agent,
-    open_elicitation_conversation,
-    reopen_elicitation_conversation,
+    open_group_conversation,
 )
-from foundry_agent.models import (
-    AttributeStatus,
-    CapturedValue,
-    ConversationTurn,
-    GapReport,
-    ValidationResult,
-)
+from foundry_agent.models import CapturedValue, ConversationTurn
 from tests.conftest import GROUPS
 
-_GLOBAL_REPORT = GapReport(
-    classification="Security",
-    attributes=[
-        AttributeStatus(
-            attribute_id="PA1",
-            name="Policy ID",
-            required=True,
-            populated=False,
-            gap="No policy ID present.",
-        ),
-        AttributeStatus(
-            attribute_id="PA3",
-            name="Policy Type",
-            required=True,
-            populated=False,
-            gap="No policy type present.",
-        ),
-        AttributeStatus(
-            attribute_id="PA7",
-            name="Purpose Statement",
-            required=True,
-            populated=True,
-            inferred_value="This policy establishes mandatory VPN rules.",
-            evidence="remote logins are permitted from unmanaged personal devices",
-        ),
-        AttributeStatus(
-            attribute_id="PA11",
-            name="Context Narrative",
-            required=True,
-            populated=False,
-            gap="No narrative present.",
-        ),
-    ],
-)
+_FG1 = GROUPS.groups[0]  # Identification & Classification (PA1, PA3)
 
 _OPEN_TURN = ConversationTurn(
-    message="Let's start with your Policy ID and Policy Type.",
+    message="Anchors what this policy is and how it is classified.\n\nWhat should we call it?",
     conversation_complete=False,
     captured=[],
 )
 
 _CLOSING_TURN = ConversationTurn(
-    message="That covers everything — thank you.",
+    message="That covers this group — thank you.",
     conversation_complete=True,
     captured=[
         CapturedValue(attribute_id="PA1", value="POL-SEC-001"),
         CapturedValue(attribute_id="PA3", value="Security"),
-        CapturedValue(attribute_id="PA7", value="Purpose statement text"),
-        CapturedValue(attribute_id="PA11", value="Narrative text"),
     ],
 )
 
@@ -82,162 +41,69 @@ def _session(client):
     return agent, agent.create_session()
 
 
+async def test_open_scopes_the_prompt_to_the_current_group(make_stub_client):
+    """The opening prompt covers THIS group's fields and adequacy — not other groups'."""
+    client = make_stub_client(_OPEN_TURN)
+    agent, session = _session(client)
+
+    await open_group_conversation(agent, session, _FG1, "content")
+
+    prompt = client.prompts[0]
+    assert _FG1.heading in prompt
+    assert "PA1" in prompt and "PA3" in prompt  # this group's attributes
+    assert "PA7" not in prompt and "PA11" not in prompt  # FG2's are out of scope
+    assert _FG1.adequacy in prompt
+
+
+async def test_open_uses_the_framing_line_without_its_label(make_stub_client):
+    """EL12 wants the framing sentence; EL10 forbids the label that precedes it."""
+    client = make_stub_client(_OPEN_TURN)
+    agent, session = _session(client)
+
+    await open_group_conversation(agent, session, _FG1, "content")
+
+    prompt = client.prompts[0]
+    assert _FG1.framing_line() in prompt
+    assert "**Framing:**" not in prompt
+
+
+async def test_continue_feeds_the_reply_for_cumulative_capture(make_stub_client):
+    client = make_stub_client(_CLOSING_TURN)
+    agent, session = _session(client)
+
+    await continue_group_conversation(
+        agent, session, _FG1, [], "POL-SEC-001, and it's a Security policy."
+    )
+
+    prompt = client.prompts[-1]
+    assert "The user replied" in prompt
+    assert "CUMULATIVELY" in prompt
+    assert "POL-SEC-001, and it's a Security policy." in prompt
+
+
 async def test_the_conversation_is_multi_turn_on_one_session(make_stub_client):
-    """Turn two must carry turn one — that is what stops the agent re-asking."""
+    """Turn two carries turn one — the same session replays the opening."""
     client = make_stub_client(_OPEN_TURN)
     client.queue(_CLOSING_TURN)
     agent, session = _session(client)
 
-    await open_elicitation_conversation(agent, session, GROUPS.groups, _GLOBAL_REPORT, "content")
-    await continue_elicitation_conversation(
-        agent, session, _GLOBAL_REPORT, [], "POL-SEC-001, and it's a Security policy."
-    )
+    await open_group_conversation(agent, session, _FG1, "content")
+    await continue_group_conversation(agent, session, _FG1, [], "POL-SEC-001, Security.")
 
     assert client.calls == 2
     replayed = client.prompts[-1]
-    assert "Anchors what this policy is and how it is classified." in replayed
-    assert "POL-SEC-001, and it's a Security policy." in replayed
+    assert _FG1.framing_line() in replayed  # the opening turn, replayed via the session
+    assert "POL-SEC-001, Security." in replayed
 
 
-async def test_open_lists_every_open_field_across_every_group(make_stub_client):
-    """The opening prompt spans the whole document, not one group."""
-    client = make_stub_client(_OPEN_TURN)
-    agent, session = _session(client)
-
-    await open_elicitation_conversation(agent, session, GROUPS.groups, _GLOBAL_REPORT, "content")
-
-    prompt = client.prompts[0]
-    assert "PA1" in prompt
-    assert "PA3" in prompt
-    assert "PA7" in prompt
-    assert "PA11" in prompt
-    assert "never all of them at once" in prompt
-
-
-async def test_the_framing_line_opens_the_conversation_without_its_document_label(
-    make_stub_client,
-):
-    """EL12 wants the sentence; EL10 forbids the label that precedes it in the file."""
-    client = make_stub_client(_OPEN_TURN)
-    agent, session = _session(client)
-
-    await open_elicitation_conversation(agent, session, GROUPS.groups, _GLOBAL_REPORT, "content")
-
-    prompt = client.prompts[0]
-    assert "Anchors what this policy is and how it is classified." in prompt
-    assert "**Framing:**" not in prompt
-
-
-async def test_open_returns_an_empty_turn_when_nothing_is_open(make_stub_client):
-    """A fully-populated document skips the model call entirely."""
-    client = make_stub_client(_OPEN_TURN)
-    agent, session = _session(client)
-    complete_report = GapReport(
-        classification="Security",
-        attributes=[
-            AttributeStatus(
-                attribute_id="PA1", name="Policy ID", required=True, populated=True, evidence="x"
-            )
-        ],
-    )
-
-    turn = await open_elicitation_conversation(
-        agent, session, GROUPS.groups, complete_report, "content"
-    )
-
-    assert turn.message == ""
-    assert turn.conversation_complete
-    assert client.calls == 0
-
-
-async def test_continue_narrows_the_open_list_to_what_is_not_yet_captured(make_stub_client):
-    """Already-captured fields must not be re-listed as open."""
-    client = make_stub_client(_CLOSING_TURN)
-    agent, session = _session(client)
-    prior_captured = [
-        CapturedValue(attribute_id="PA1", value="POL-SEC-001"),
-        CapturedValue(attribute_id="PA3", value="Security"),
-    ]
-
-    await continue_elicitation_conversation(
-        agent, session, _GLOBAL_REPORT, prior_captured, "POL-SEC-001, and it's Security."
-    )
-
-    prompt = client.prompts[-1]
-    # "PA1" alone is unsafe to assert absent — "PA11" (still open) contains it
-    # as a substring, so check the exact rendered "id name" pair instead.
-    assert "PA1 Policy ID" not in prompt
-    assert "PA3 Policy Type" not in prompt
-    assert "PA7 Purpose Statement" in prompt
-    assert "PA11 Context Narrative" in prompt
-
-
-async def test_continue_closes_the_conversation_when_nothing_remains(make_stub_client):
-    client = make_stub_client(_CLOSING_TURN)
-    agent, session = _session(client)
-    prior_captured = [
-        CapturedValue(attribute_id=aid, value="x") for aid in ("PA1", "PA3", "PA7", "PA11")
-    ]
-
-    await continue_elicitation_conversation(
-        agent, session, _GLOBAL_REPORT, prior_captured, "all done"
-    )
-
-    assert "conversation_complete=true" in client.prompts[-1]
-
-
-async def test_a_reply_is_read_for_every_value_it_carries(make_stub_client):
+async def test_continue_closes_when_the_group_is_covered(make_stub_client):
     client = make_stub_client(_CLOSING_TURN)
     agent, session = _session(client)
 
-    await continue_elicitation_conversation(
-        agent, session, _GLOBAL_REPORT, [], "PA1 is X, Version 0.1, and the type is Security."
-    )
-
-    prompt = client.prompts[-1]
-    assert "EVERY value it carries" in prompt
-    assert "CUMULATIVELY" in prompt
-
-
-async def test_reopen_names_validations_missing_ids(make_stub_client):
-    client = make_stub_client(_OPEN_TURN)
-    agent, session = _session(client)
-    result = ValidationResult(
-        complete=False,
-        missing_attribute_ids=["PA3"],
-        rationale="Policy type is still not one of Governance/Operational/Security/Compliance.",
-    )
-
-    await reopen_elicitation_conversation(agent, session, _GLOBAL_REPORT, result)
-
-    prompt = client.prompts[-1]
-    assert "PA3" in prompt
-    assert "Policy type is still not one of" in prompt
-    assert "never all of them at once" in prompt
-
-
-async def test_reopen_falls_back_for_an_id_analysis_never_reported(make_stub_client):
-    """A mismatch between validation and analysis is surfaced, not silently dropped."""
-    client = make_stub_client(_OPEN_TURN)
-    agent, session = _session(client)
-    result = ValidationResult(
-        complete=False, missing_attribute_ids=["PA99"], rationale="unexpected"
-    )
-
-    await reopen_elicitation_conversation(agent, session, _GLOBAL_REPORT, result)
-
-    assert "PA99" in client.prompts[-1]
-
-
-async def test_reopen_returns_an_empty_turn_when_validation_names_nothing(make_stub_client):
-    client = make_stub_client(_OPEN_TURN)
-    agent, session = _session(client)
-    result = ValidationResult(complete=True, missing_attribute_ids=[], rationale="all good")
-
-    turn = await reopen_elicitation_conversation(agent, session, _GLOBAL_REPORT, result)
+    turn = await continue_group_conversation(agent, session, _FG1, [], "all set")
 
     assert turn.conversation_complete
-    assert client.calls == 0
+    assert [v.attribute_id for v in turn.captured] == ["PA1", "PA3"]
 
 
 async def test_the_elicitation_agent_mounts_both_skills(make_stub_client):
@@ -245,7 +111,7 @@ async def test_the_elicitation_agent_mounts_both_skills(make_stub_client):
     client = make_stub_client(_OPEN_TURN)
     agent, session = _session(client)
 
-    await open_elicitation_conversation(agent, session, GROUPS.groups, _GLOBAL_REPORT, "content")
+    await open_group_conversation(agent, session, _FG1, "content")
 
     instructions = client.options["instructions"]
     assert FORMAT_SKILL_NAME in instructions
@@ -260,9 +126,7 @@ async def test_skipping_the_skill_load_emits_a_warning(make_stub_client, caplog)
     agent, session = _session(client)
 
     with caplog.at_level(logging.WARNING, logger="foundry_agent.agents"):
-        await open_elicitation_conversation(
-            agent, session, GROUPS.groups, _GLOBAL_REPORT, "content"
-        )
+        await open_group_conversation(agent, session, _FG1, "content")
 
     assert any("did not call load_skill" in r.message for r in caplog.records)
 
@@ -271,10 +135,35 @@ async def test_a_turn_is_returned_as_the_structured_contract(make_stub_client):
     client = make_stub_client(_CLOSING_TURN)
     agent, session = _session(client)
 
-    turn = await open_elicitation_conversation(
-        agent, session, GROUPS.groups, _GLOBAL_REPORT, "content"
-    )
+    turn = await open_group_conversation(agent, session, _FG1, "content")
 
     assert client.options["response_format"] is ConversationTurn
     assert turn.conversation_complete
-    assert [value.attribute_id for value in turn.captured] == ["PA1", "PA3", "PA7", "PA11"]
+    assert [v.attribute_id for v in turn.captured] == ["PA1", "PA3"]
+
+
+async def test_the_elicitation_turn_runs_at_low_reasoning_effort(make_stub_client):
+    """Fast turns: the elicitation call asks the Responses API for low reasoning (DoD).
+
+    The Responses API's structured-output path takes ``reasoning={"effort": ...}``,
+    not the Chat-Completions ``reasoning_effort=`` form (the latter is rejected
+    live — witnessed in the Batch 3 run).
+    """
+    client = make_stub_client(_OPEN_TURN)
+    agent, session = _session(client)
+
+    await open_group_conversation(agent, session, _FG1, "content")
+
+    assert client.options["reasoning"] == {"effort": "low"}
+
+
+def test_elicitation_instructions_forbid_inventing_load_bearing_facts():
+    """Elicitation now owns inference, so the must-ask guardrail lives on its instructions.
+
+    The generic discipline is in code; the specific must-ask fields (PA10 etc.)
+    stay in the format skill's inference guidance, mounted by the agent.
+    """
+    text = ELICITATION_INSTRUCTIONS.lower()
+    assert "never invent" in text
+    assert "ask for those" in text
+    assert "effective date" in text

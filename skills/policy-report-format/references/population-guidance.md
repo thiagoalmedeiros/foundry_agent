@@ -6,6 +6,13 @@ Pre-reads: [attributes.md](attributes.md),
 How to write each attribute WELL once a basis exists. Values are recorded
 short and concrete — a reviewer should act on them without follow-up.
 
+The identity/status defaults below (Version 0.1, Status Draft, a provisional
+`POL-<DOMAIN>-001` id) are safe to fill and flag for confirmation without
+asking. The load-bearing facts that
+[inference-guidance.md](inference-guidance.md) marks *ask, never invent* —
+the effective date, named regulatory instruments, an owner with no basis, the
+audit obligation — are not: leave them missing so the interview asks.
+
 ## Identity fields (FG1)
 
 - **PA1** — derive the domain code from the policy's subject (SEC, HR, FIN,

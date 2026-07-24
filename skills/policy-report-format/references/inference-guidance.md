@@ -42,3 +42,30 @@ answer, so inference left on the table costs them work. A defensible
 inferred value the user can correct in one word beats a question they must
 answer from scratch. Longer input means MORE populated attributes, not
 more questions.
+
+## Load-bearing facts: ask, never invent
+
+Infer aggressively — but a few attributes carry a fact only the stakeholder
+knows, and a wrong value here ships a false statement in a compliance
+document. When the content gives no basis for these, mark them missing so
+the interview ASKS. Never default them, and never present a guessed value as
+a suggestion — a flagged-but-false regulatory obligation or effective date is
+still false.
+
+- **PA10 Effective Date** — a real ISO date or a named trigger. There is no
+  safe default; "today" is a guess, not a fact.
+- **PA13 Regulatory Drivers** — the actual named instruments. Never name a law
+  or standard the content does not; a wrongly asserted obligation is worse
+  than a gap. (Required only when PA3 is Compliance.)
+- **PA6 Policy Owner** — the accountable role. Promote a named person to their
+  role when the content gives one (see
+  [population-guidance.md](population-guidance.md)); with no basis at all, ask —
+  do not guess the organisation's structure.
+- **PA28 Audit Requirements** — the concrete audit obligation, when PA3 is
+  Security or Compliance. State what the content supports; do not invent a
+  cadence or scope.
+
+Everything population-guidance gives a safe default — Version 0.1 / Status
+Draft, a provisional `POL-<DOMAIN>-001` id — is inferred and flagged for
+confirmation, not asked from scratch. The line is: default the boilerplate,
+ask the facts.
