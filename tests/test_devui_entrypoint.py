@@ -1,5 +1,7 @@
 """The entrypoints assemble the live workflow and agent without network calls."""
 
+import os
+
 from foundry_agent.workflow import create_policy_report_workflow
 
 _FAKE_ENV = {
@@ -38,12 +40,39 @@ def test_devui_entrypoint_serves_the_workflow_as_a_chat_agent(monkeypatch):
     assert main.DEVUI_PORT == 8090
 
 
-def test_devui_instrumentation_is_selected_by_the_otlp_endpoint(monkeypatch):
-    """OTel on exactly when a destination is configured — env-selected, like production."""
+def test_devui_instrumentation_requires_a_listening_collector(monkeypatch):
+    """OTel on only when a destination is configured AND answering.
+
+    ``.env`` keeps the endpoint set permanently, so a configured-but-absent
+    collector must disable instrumentation AND unset the endpoint — DevUI's
+    own executor builds exporters from that env var regardless of the serve
+    flag, so leaving it set would spam the trace/metric/log exporters against
+    a closed port forever.
+    """
+    import socket
+
     from foundry_agent import main
 
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
-    assert main._instrumentation_enabled() is False
+    assert main._prepare_instrumentation() is False, "unset endpoint means OFF"
 
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-    assert main._instrumentation_enabled() is True
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+    try:
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", f"http://127.0.0.1:{port}")
+        assert main._prepare_instrumentation() is True, "listening collector means ON"
+        assert os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") == f"http://127.0.0.1:{port}", (
+            "a live collector's endpoint must be left in place for the exporters"
+        )
+    finally:
+        listener.close()
+
+    # Port now closed: OFF, and the endpoint must be removed so DevUI's
+    # configure_otel_providers() creates no exporters against the dead port.
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", f"http://127.0.0.1:{port}")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+    assert main._prepare_instrumentation() is False, "closed port means OFF, not retry spam"
+    assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in os.environ, "dead endpoint must be unset"
+    assert "OTEL_EXPORTER_OTLP_PROTOCOL" not in os.environ

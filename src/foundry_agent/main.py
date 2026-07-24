@@ -14,6 +14,8 @@ checkpoint-based ``workflow_hil_response`` path.
 import argparse
 import logging
 import os
+import socket
+from urllib.parse import urlparse
 
 from agent_framework.devui import serve
 from dotenv import load_dotenv
@@ -38,16 +40,48 @@ def create_policy_report_agent() -> WorkflowChatAgent:
     )
 
 
-def _instrumentation_enabled() -> bool:
-    """OTel instrumentation on exactly when an OTLP destination is configured.
+def _prepare_instrumentation() -> bool:
+    """Enable OTel only when the configured OTLP collector is actually listening.
 
     Env-selected like every other environment concern here: point
     ``OTEL_EXPORTER_OTLP_ENDPOINT`` at a collector (``task sim:up``'s on
     :4318, the AI Toolkit's, or the Foundry Toolkit visualizer's) and DevUI
-    traces flow there; leave it unset and instrumentation stays off, so a
-    collector-less run never spams exporter retries against a closed port.
+    traces flow there. But two facts force a probe-and-unset rather than a
+    plain read, because ``.env`` keeps the endpoint set permanently:
+
+    - ``agent_framework``'s ``enable_instrumentation`` defaults to **True**,
+      and DevUI's executor calls ``configure_otel_providers()`` on that alone.
+    - ``configure_otel_providers()`` builds trace/metric/log exporters
+      whenever ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set — the ``serve()``
+      ``instrumentation_enabled`` flag does not gate it.
+
+    So a configured-but-absent collector would spam connection-refused
+    retries across all three exporters (the metric reader fires on its own
+    interval, with or without a turn). Unsetting the endpoint here is the one
+    lever that reliably stops those exporters from being created. Returns the
+    flag to pass to ``serve(instrumentation_enabled=...)``.
     """
-    return bool(os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"))
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if not endpoint:
+        return False
+    parsed = urlparse(endpoint)
+    try:
+        with socket.create_connection(
+            (parsed.hostname or "localhost", parsed.port or 4318), timeout=0.5
+        ):
+            return True
+    except OSError:
+        # Drop the endpoint so DevUI's own configure_otel_providers() builds no
+        # exporters either — a False serve flag alone would not stop it.
+        os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
+        os.environ.pop("OTEL_EXPORTER_OTLP_PROTOCOL", None)
+        logging.getLogger(__name__).info(
+            "OTEL_EXPORTER_OTLP_ENDPOINT was set (%s) but nothing is listening there — "
+            "instrumentation stays OFF for this run. Start `task sim:up` (Aspire) or "
+            "`task otel:up` first to collect traces.",
+            endpoint,
+        )
+        return False
 
 
 def main() -> None:
@@ -80,7 +114,7 @@ def main() -> None:
         port=args.port,
         auto_open=True,
         auth_enabled=False,
-        instrumentation_enabled=_instrumentation_enabled(),
+        instrumentation_enabled=_prepare_instrumentation(),
     )
 
 
