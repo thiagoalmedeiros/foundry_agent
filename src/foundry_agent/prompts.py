@@ -252,6 +252,16 @@ def _all_groups_scope(groups: list[FieldGroup]) -> str:
     return f"Every field group in this document — judge or address ALL of them:\n\n{rendered}"
 
 
+def _field_line(target: AttributeStatus) -> str:
+    """One open field as the prompt lists it: a CONFIRM with its inferred value, or an ASK."""
+    if target.populated and target.inferred_value:
+        return (
+            f"- {target.attribute_id} {target.name} — CONFIRM: {target.inferred_value}"
+            f"  [evidence: {target.evidence or 'not recorded'}]"
+        )
+    return f"- {target.attribute_id} {target.name} — ASK: {target.gap or 'no value in the input'}"
+
+
 def _open_fields_clause(targets: list[AttributeStatus]) -> str:
     """Render every field the whole-document conversation still needs to address.
 
@@ -261,18 +271,10 @@ def _open_fields_clause(targets: list[AttributeStatus]) -> str:
     """
     if not targets:
         return "Open fields: (none — nothing left to confirm or ask)."
-    lines = [
-        f"- {target.attribute_id} {target.name} — CONFIRM: {target.inferred_value}"
-        f"  [evidence: {target.evidence or 'not recorded'}]"
-        if target.populated and target.inferred_value
-        else f"- {target.attribute_id} {target.name} — ASK: "
-        f"{target.gap or 'no value in the input'}"
-        for target in targets
-    ]
     return (
         "Every field still open across the whole document — choose a small, related "
         "cluster from this list for THIS turn only (never all of them at once):\n"
-        + "\n".join(lines)
+        + "\n".join(_field_line(target) for target in targets)
     )
 
 

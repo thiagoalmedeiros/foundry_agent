@@ -34,16 +34,9 @@ _module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_module)
 validate = _module.validate
 
-_GROUPS = [
-    {"attribute_ids": [f"PA{n}" for n in range(1, 7)]},
-    {"attribute_ids": [f"PA{n}" for n in range(7, 11)]},
-    {"attribute_ids": [f"PA{n}" for n in range(11, 15)]},
-    {"attribute_ids": [f"PA{n}" for n in range(15, 18)]},
-    {"attribute_ids": [f"PA{n}" for n in range(18, 21)]},
-    {"attribute_ids": [f"PA{n}" for n in range(21, 25)]},
-    {"attribute_ids": [f"PA{n}" for n in range(25, 29)]},
-    {"attribute_ids": [f"PA{n}" for n in range(29, 33)]},
-]
+# Eight groups jointly covering PA1-PA32 exactly once, like the real skill's FG1-FG8.
+_GROUP_BOUNDS = [(1, 7), (7, 11), (11, 15), (15, 18), (18, 21), (21, 25), (25, 29), (29, 33)]
+_GROUPS = [{"attribute_ids": [f"PA{n}" for n in range(lo, hi)]} for lo, hi in _GROUP_BOUNDS]
 
 
 def _fully_valid() -> dict[str, str]:

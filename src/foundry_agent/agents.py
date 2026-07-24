@@ -101,6 +101,11 @@ def _cache_key(stage: str) -> str:
 #: pure and finishes in milliseconds; the cap only bounds a hung interpreter.
 _SCRIPT_TIMEOUT_SECONDS = float(os.environ.get("SKILL_SCRIPT_TIMEOUT_SECONDS", "30"))
 
+#: Environment passed through to skill-script subprocesses: what a Python
+#: interpreter needs to start, and nothing else — no credentials, since skill
+#: scripts are pure by contract (see the skill's SECURITY.md).
+_SCRIPT_ENV_KEYS = ("PATH", "HOME", "TMPDIR", "LANG", "LC_ALL")
+
 
 def _script_argv(args: dict[str, Any] | list[Any] | None) -> list[str]:
     """Flatten the model-supplied tool arguments into subprocess argv strings.
@@ -126,9 +131,7 @@ async def _run_python_skill_script(
     the run.
     """
     path = Path(script.full_path)
-    # Minimal environment: skill scripts are pure by contract (SECURITY.md), so
-    # they get no credentials — only what a Python subprocess needs to start.
-    env = {k: v for k in ("PATH", "HOME", "TMPDIR", "LANG", "LC_ALL") if (v := os.environ.get(k))}
+    env = {key: value for key in _SCRIPT_ENV_KEYS if (value := os.environ.get(key))}
     process = await asyncio.create_subprocess_exec(
         sys.executable,
         str(path),
