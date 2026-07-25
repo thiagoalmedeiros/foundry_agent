@@ -6,13 +6,17 @@ System design and structure. Working instructions live in
 ## System components
 
 - **Workflow engine** (`src/foundry_agent/workflow.py`) — MAF graph API:
-  Discovery → Gap Analysis → Elicitation → Validation → Assembler, with
-  validation able to reopen the elicitation conversation. Bounded by
-  `MAX_ELICITATION_TURNS` and `MAX_VALIDATION_ROUNDS`; exhausting either
-  banks the run (gaps land in an advisory appendix) rather than looping.
-- **Agents** (`src/foundry_agent/agents.py`) — five agents over one chat
-  client factory. Elicitation uses MAF progressive disclosure
-  (`SkillsProvider`/`FileSkillsSource`); the stateless agents inline
+  Discovery → Elicitation → Validation → Assembler. Elicitation clarifies
+  one field group at a time (overriding the elicitation skill's default
+  whole-document cadence, EL4); validation runs once, after the last group
+  closes. There is no fixed turn cap — the skill's per-point give-up rule
+  (EL6) guarantees each group terminates, and unresolved required
+  attributes are banked into an advisory appendix. `MAX_USER_INPUT_CHARS`
+  bounds any single input.
+- **Agents** (`src/foundry_agent/agents.py`) — four agents (discovery,
+  elicitation, validation, authoring) over one chat client factory.
+  Discovery and elicitation use MAF progressive disclosure
+  (`SkillsProvider`/`FileSkillsSource`); validation and authoring inline
   per-agent reference packs from the same skill files; validation
   additionally mounts the skill provider so the native `run_skill_script`
   tool can execute the skill's own validation script through the
@@ -20,7 +24,7 @@ System design and structure. Working instructions live in
 - **Prompts** (`src/foundry_agent/prompts.py`) — every instruction block,
   the pack manifests, and per-turn prompt clauses; skill identity
   constants (`FORMAT_SKILL_DIR`, `VALIDATION_SCRIPT_NAME`).
-- **Domain skills** (`skills/`) — `policy-report-format` (the document
+- **Domain skills** (`skills/`) — `police-report-format` (the document
   spec + its executable `validation/validate.py`) and `elicitation` (the
   question-loop behavior). All domain knowledge lives here.
 - **Serving** (`src/foundry_agent/hosting.py`) — production entrypoint:
@@ -38,8 +42,8 @@ System design and structure. Working instructions live in
 ## Directory structure
 
 ```
-skills/policy-report-format/    # WHAT a Policy Report is + its own validation script
-skills/elicitation/             # HOW the question loop runs (EL1-EL14)
+skills/police-report-format/    # WHAT a Police Incident Report is + its own validation script
+skills/elicitation/             # HOW the question loop runs (EL1-EL15)
 azure.yaml                      # Foundry hosted-agent deploy config (azd provision/deploy)
 main.py                         # Foundry code-deploy entrypoint → foundry_agent.hosting.main
 infra/local/                    # local deploy sim: OTel collector + Aspire (docker compose)
@@ -48,9 +52,9 @@ src/foundry_agent/
 ├── hosting.py                  # PRODUCTION entrypoint — WorkflowAgent + ResponsesHostServer (+ chat mode)
 ├── checkpoint_compat.py        # shim: lets hosted checkpoints restore this workflow's types
 ├── main.py                     # DevUI entrypoint (optional dev tooling)
-├── workflow.py                 # the global pipeline: discovery → analysis → elicitation → validation → assembler
+├── workflow.py                 # the pipeline: discovery → elicitation → validation → assembler
 ├── chat_agent.py               # drives the workflow over chat turns; per-turn checkpoints + restart resume
-├── agents.py                   # 5 agents, skill packs + skill mounts, client factory, script runner
+├── agents.py                   # 4 agents, skill packs + skill mounts, client factory, script runner
 ├── prompts.py                  # everything the agents are told: instructions, packs, per-turn clauses
 ├── usage.py                    # per-stage token accounting + OTel span annotation
 ├── otel_collector.py           # dev tooling: sqlite-backed OTLP collector (task otel:up)

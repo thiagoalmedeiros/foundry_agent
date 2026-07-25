@@ -1,27 +1,25 @@
-# foundry_agent — Policy Report authoring agent on Microsoft Agent Framework
+# foundry_agent — Police Incident Report authoring agent on Microsoft Agent Framework
 
 A **self-contained Foundry agent template**: a global, agent-paced,
 human-in-the-loop authoring interview built on the **Microsoft Agent
 Framework** (Python), served as an Azure AI **Foundry Hosted Agent**,
-currently carrying a **Policy Report** domain. Fork it and swap the
+currently carrying a **Police Incident Report** domain. Fork it and swap the
 `skills/` content to carry a different document domain — the interview
 engine, serving paths, tests, and observability come along unchanged with
 **zero code change**: not just the field definitions, but discovery, the
 elicitation cadence, and the validation rules are all read from the
 mounted skill at run time.
 
-The flow is a single pipeline pass over the whole document, not a walk
-through separately-scoped groups:
+The flow walks the document one field group at a time, in the order the
+skill declares:
 
-> Discovery (an LLM agent reads the skill's field groups) → Gap Analysis
-> (one pass judging every group's attributes at once) → Elicitation (one
-> continuous, agent-paced conversation — the agent decides how many
-> related open fields to raise per turn, never one at a time and never
-> the whole document at once) → Validation (the skill's own deterministic
-> script, run as a tool call, plus the agent's adequacy judgment) —
-> reopening the same conversation on inadequacy or advancing to the
-> Assembler, which emits a complete Policy Report per the skill's
-> canonical template.
+> Discovery (an LLM agent reads the skill's field groups) → Elicitation (a
+> natural multi-turn conversation, one field group at a time, in the
+> skill's declared order — inferring what the content supports, confirming
+> it, and asking for the rest) → Validation (once, after the last group
+> closes: the skill's own deterministic script, run as a tool call, plus
+> the agent's adequacy judgment) → the Assembler, which emits a complete
+> Police Incident Report per the skill's canonical template.
 
 This is the MAF **workflow-build** (graph API) sibling of this template.
 A **sequential-orchestration** sibling — deterministic discovery and
@@ -32,28 +30,29 @@ separately and not part of this codebase yet.
 ## How the domain is defined
 
 **No agent, and no workflow code, carries domain knowledge.** Everything
-about what a Policy Report *is* — and how it is validated — lives in two
-in-repo skills:
+about what a Police Incident Report *is* — and how it is validated — lives
+in two in-repo skills:
 
-- [`skills/policy-report-format/`](skills/policy-report-format/) — the
+- [`skills/police-report-format/`](skills/police-report-format/) — the
   format spec: field groups partitioning attributes, characteristics and
-  rules (advisory), statement patterns, population/inference guidance,
+  rules (advisory), record patterns, population/inference guidance,
   the canonical template, **and the skill's own deterministic validation
-  script** ([`validation/validate.py`](skills/policy-report-format/validation/validate.py)).
+  script** ([`validation/validate.py`](skills/police-report-format/validation/validate.py)).
 - [`skills/elicitation/`](skills/elicitation/) — the behavior skill: the
-  question-loop invariants EL1–EL14 (cadence, capture discipline, Socratic
-  assist, honest attribution).
+  question-loop invariants EL1–EL15 (cadence, capture discipline, Socratic
+  assist, honest sourcing).
 
-That content reaches agents two ways. The **elicitation** agent mounts
-both skills via MAF's `SkillsProvider` + `FileSkillsSource` progressive
-disclosure (`load_skill` / `read_skill_resource`), amortized by its
-multi-turn session. The **discovery**, **gap-analysis**, **validation**,
-and **authoring** agents carry per-agent reference packs read *verbatim
-from the same skill files* at construction time and inlined into their
-system prompts (cheaper than a tool loop for stateless calls — the
-predecessor project measured it). The validation agent additionally
-mounts the format skill's provider — not for disclosure, but so the
-native `run_skill_script` tool can execute the skill's validation script.
+That content reaches agents two ways. The **discovery** and **elicitation**
+agents mount skills via MAF's `SkillsProvider` + `FileSkillsSource`
+progressive disclosure (`load_skill` / `read_skill_resource`) — discovery
+mounts the format skill, elicitation mounts both, amortized by its
+multi-turn session. The **validation** and **authoring** agents carry
+per-agent reference packs read *verbatim from the same skill files* at
+construction time and inlined into their system prompts (cheaper than a
+tool loop for stateless calls — the predecessor project measured it). The
+validation agent additionally mounts the format skill's provider — not for
+disclosure, but so the native `run_skill_script` tool can execute the
+skill's validation script.
 
 **Discovery is an LLM agent**, not a deterministic parser: it reads the
 skill's Field Groups reference through progressive disclosure and returns
@@ -75,14 +74,14 @@ substantive adequacy judgment on top of the script's deterministic
 result. Swap the skill and its validation rules travel with it; the
 workflow contains no attribute ids, enums, or thresholds of its own.
 
-**Elicitation is agent-paced**, per the elicitation skill's own default
-cadence (EL4): every open field across every discovered group is handed
-to the agent in one prompt, and the agent chooses a small, related
-cluster to raise per turn — never one field at a time, never the entire
-remaining set at once. Inferred values are presented for light
-confirmation rather than re-asked (EL13); a Socratic assist and
-coach-on-mismatch keep a stuck or mismatched answer on the same field
-(EL11) within a follow-up budget.
+**Elicitation runs one field group at a time**, in the skill's declared
+order — this workflow overrides the elicitation skill's default
+whole-document cadence (EL4). For each group the agent drives a natural
+multi-turn conversation until the group's Adequacy is satisfied, then
+advances. Inferred values are presented for light confirmation rather than
+re-asked (EL13); a Socratic assist and coach-on-mismatch keep a stuck or
+mismatched answer on the same field (EL11) within a follow-up budget (EL6);
+honest sourcing labels every value by its origin (EL15).
 
 ## Serving paths
 
@@ -106,8 +105,8 @@ Two entrypoints, deliberately distinct:
 ## Layout
 
 ```
-skills/policy-report-format/    # WHAT a Policy Report is + its own validation script
-skills/elicitation/             # HOW the question loop runs (EL1-EL14)
+skills/police-report-format/    # WHAT a Police Incident Report is + its own validation script
+skills/elicitation/             # HOW the question loop runs (EL1-EL15)
 azure.yaml                      # Foundry hosted-agent deploy config (azd provision/deploy)
 main.py                         # Foundry code-deploy entrypoint → foundry_agent.hosting.main
 infra/local/                    # local deploy sim: OTel collector + Aspire (docker compose)
@@ -115,9 +114,9 @@ src/foundry_agent/
 ├── hosting.py                  # PRODUCTION entrypoint — WorkflowAgent + ResponsesHostServer (+ chat mode)
 ├── checkpoint_compat.py        # shim: lets hosted checkpoints restore this workflow's types
 ├── main.py                     # DevUI entrypoint (optional dev tooling)
-├── workflow.py                 # the global pipeline: discovery → analysis → elicitation → validation → assembler
+├── workflow.py                 # the pipeline: discovery → elicitation → validation → assembler
 ├── chat_agent.py               # drives the workflow over chat turns; per-turn checkpoints + restart resume
-├── agents.py                   # 5 agents, skill packs + skill mounts, client factory, script runner
+├── agents.py                   # 4 agents, skill packs + skill mounts, client factory, script runner
 ├── prompts.py                  # everything the agents are told: instructions, packs, per-turn clauses
 ├── usage.py                    # per-stage token accounting + OTel span annotation
 ├── otel_collector.py           # dev tooling: sqlite-backed OTLP collector (task otel:up)
@@ -127,13 +126,14 @@ plans/                          # implementation plans + lessons (project histor
 ```
 
 Termination policy (in [`workflow.py`](src/foundry_agent/workflow.py)):
-required attributes block; advisory findings never do. Two budgets bound
-the whole run — `MAX_ELICITATION_TURNS` caps the conversation and
-`MAX_VALIDATION_ROUNDS` caps how often validation may reopen it. A
-document that exhausts either is *banked*, not retried: its gaps land in
-the `## Advisory findings` appendix and the run terminates, so a run
-always finishes. The conversation's `AgentSession` and the gap-analysis
-report both ride inside the `request_info` payload so they survive
+required attributes block; advisory findings never do. There is no fixed
+turn cap — the elicitation skill's per-point give-up rule (EL6) guarantees
+each group terminates, and validation runs once after the last group
+closes rather than reopening the conversation. Unresolved required
+attributes are *banked*, not retried: they land in the `## Advisory
+findings` appendix and the run terminates, so a run always finishes.
+`MAX_USER_INPUT_CHARS` bounds any single user input. The conversation's
+`AgentSession` rides inside the `request_info` payload so it survives
 checkpoint resumes.
 
 ## Running
@@ -198,7 +198,7 @@ Deploy to Foundry: `azd provision` then `azd deploy` against
 
 ## Forking this template for a new domain
 
-1. Replace `skills/policy-report-format/` with your format skill — keep
+1. Replace `skills/police-report-format/` with your format skill — keep
    the structural contract of `references/field-groups.md` (headings,
    Framing / Attributes / Adequacy fields, coverage map) and the ten
    reference-file names the prompt packs read.
@@ -208,7 +208,7 @@ Deploy to Foundry: `azd provision` then `azd deploy` against
    `python validate.py '<captured JSON>' '<groups JSON>'` → failing ids as
    JSON on stdout — because the Validation agent runs it as a subprocess
    via the skill provider's native `run_skill_script` tool. See the
-   policy-report-format skill's own script and its `validation/SECURITY.md`
+   police-report-format skill's own script and its `validation/SECURITY.md`
    for the trust model. No workflow code changes: the provider discovers
    and runs whatever script the mounted skill ships.
 3. Rewrite the instruction blocks in `prompts.py` to your vocabulary — the
