@@ -18,7 +18,7 @@ from foundry_agent.agents import (
     create_validation_agent,
 )
 from foundry_agent.chat_agent import ERROR_REPLY_PREFIX, WorkflowChatAgent
-from foundry_agent.workflow import build_policy_report_workflow
+from foundry_agent.workflow import build_report_workflow
 from tests.conftest import (
     CLOSING_TURN,
     COMPLETE_VALIDATION,
@@ -54,7 +54,7 @@ def _make_agent(
     def factory():
         elicitation_client = make_elicitation_client(*turns)
         clients.append({"elicitation": elicitation_client})
-        return build_policy_report_workflow(
+        return build_report_workflow(
             elicitation_agent=create_elicitation_agent(elicitation_client),
             validation_agent=create_validation_agent(make_stub_client(COMPLETE_VALIDATION)),
             authoring_agent=create_authoring_agent(make_stub_client(None, text=STUB_DOCUMENT)),
@@ -76,13 +76,13 @@ async def test_resumes_after_restart(make_stub_client, make_elicitation_client, 
     """A rebuilt agent over the same checkpoint root continues the paused run."""
     root = tmp_path / "chat-checkpoints"
     first, _ = _make_agent(make_stub_client, make_elicitation_client, root)
-    assert "Anchors what this policy is" in await _say(first, "hi")
+    assert "Anchors what this record is" in await _say(first, "hi")
 
     # The restart: a brand-new agent instance, empty conversation cache, same root.
     second, clients = _make_agent(
         make_stub_client, make_elicitation_client, root, turns=(CLOSING_TURN,)
     )
-    reply = await _say(second, "Remote Work Security Policy, type Security")
+    reply = await _say(second, "Sample Record Title, type Security")
 
     assert reply == STUB_DOCUMENT, "the resumed run should close and produce the document"
     assert "The user replied" in clients[0]["elicitation"].prompts[0], (
@@ -120,7 +120,7 @@ async def test_error_clears_checkpoint(make_stub_client, make_elicitation_client
     def factory():
         elicitation_client = make_stub_client(OPEN_TURN)
         elicitation_client.queue({"not": "a ConversationTurn"})  # second turn blows up parsing
-        return build_policy_report_workflow(
+        return build_report_workflow(
             elicitation_agent=create_elicitation_agent(elicitation_client),
             validation_agent=create_validation_agent(make_stub_client(COMPLETE_VALIDATION)),
             authoring_agent=create_authoring_agent(make_stub_client(None, text=STUB_DOCUMENT)),
@@ -130,7 +130,7 @@ async def test_error_clears_checkpoint(make_stub_client, make_elicitation_client
     broken = WorkflowChatAgent(
         factory, name="test-agent", description="test", checkpoint_root=root
     )
-    assert "Anchors what this policy is" in await _say(broken, "hi")
+    assert "Anchors what this record is" in await _say(broken, "hi")
     assert (await _say(broken, "boom")).startswith(ERROR_REPLY_PREFIX)
 
     checkpoint_files = list((root / "s1").rglob("*")) if (root / "s1").exists() else []
@@ -140,7 +140,7 @@ async def test_error_clears_checkpoint(make_stub_client, make_elicitation_client
 
     # And the next process starts FRESH — the opening framing, not a resume.
     fresh, clients = _make_agent(make_stub_client, make_elicitation_client, root)
-    assert "Anchors what this policy is" in await _say(fresh, "hi")
+    assert "Anchors what this record is" in await _say(fresh, "hi")
     assert "Field group to clarify now" in clients[0]["elicitation"].prompts[0], (
         "a fresh start opens the first group, not a resume"
     )

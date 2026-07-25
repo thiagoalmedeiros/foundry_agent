@@ -24,7 +24,7 @@ from foundry_agent.models import (
     ValidationResult,
 )
 #: The sample assessment a user realistically pastes or uploads mid-conversation.
-INPUT_FILE = Path(__file__).resolve().parent / "fixtures" / "policy-input-file.md"
+INPUT_FILE = Path(__file__).resolve().parent / "fixtures" / "sample-input-file.md"
 
 GROUPS = FieldGroups(
     groups=[
@@ -32,16 +32,16 @@ GROUPS = FieldGroups(
             group_id="FG1",
             name="Identification & Classification",
             heading="### FG1 — Identification & Classification",
-            framing="Anchors what this policy is and how it is classified.",
+            framing="Anchors what this record is and how it is classified.",
             attribute_ids=["PA1", "PA3"],
             adequacy="PA1 and PA3 populated; PA3 is exactly one of "
-            "Governance/Operational/Security/Compliance.",
+            "the sanctioned categories.",
         ),
         FieldGroup(
             group_id="FG2",
             name="Purpose & Context",
             heading="### FG2 — Purpose & Context",
-            framing="The core of the policy: why it exists and the situation demanding it.",
+            framing="The core of the record: why it exists and the situation demanding it.",
             attribute_ids=["PA7", "PA11"],
             adequacy="PA7 follows the purpose statement pattern; "
             "PA11 is 2-5 paragraphs.",
@@ -52,17 +52,17 @@ GROUP_COUNT = len(GROUPS.groups)
 
 #: The elicitation agent's opening turn: it still holds the floor.
 OPEN_TURN = ConversationTurn(
-    message="Anchors what this policy is and how it is classified.\n\n"
-    "**Policy ID**\n\nSo we can refer to this later.\n\n---\n\nWhat should we call it?",
+    message="Anchors what this record is and how it is classified.\n\n"
+    "**Record ID**\n\nSo we can refer to this later.\n\n---\n\nWhat should we call it?",
     conversation_complete=False,
 )
 
 #: A follow-up turn: the reply left something open.
 FOLLOW_UP_TURN = ConversationTurn(
-    message="**Policy Type**\n\nThis drives what else the document needs.\n\n---\n\n"
+    message="**Record Type**\n\nThis drives what else the document needs.\n\n---\n\n"
     "Is this mainly about protecting assets, or about how work gets done?",
     conversation_complete=False,
-    captured=[CapturedValue(attribute_id="PA1", value="Remote Work Security Policy")],
+    captured=[CapturedValue(attribute_id="PA1", value="Sample Record Title")],
 )
 
 #: The closing turn: every compulsory attribute is settled.
@@ -70,7 +70,7 @@ CLOSING_TURN = ConversationTurn(
     message="That covers what I needed here — thank you.",
     conversation_complete=True,
     captured=[
-        CapturedValue(attribute_id="PA1", value="Remote Work Security Policy"),
+        CapturedValue(attribute_id="PA1", value="Sample Record Title"),
         CapturedValue(attribute_id="PA3", value="Security"),
     ],
 )
@@ -80,7 +80,7 @@ UNRESOLVED_TURN = ConversationTurn(
     message="We can come back to that one later.",
     conversation_complete=True,
     captured=[
-        CapturedValue(attribute_id="PA1", value="Remote Work Security Policy"),
+        CapturedValue(attribute_id="PA1", value="Sample Record Title"),
         CapturedValue(
             attribute_id="PA3", value="unknown", status=CaptureStatus.UNRESOLVED
         ),
@@ -91,10 +91,10 @@ COMPLETE_VALIDATION = ValidationResult(complete=True, rationale="Adequacy rules 
 INCOMPLETE_VALIDATION = ValidationResult(
     complete=False,
     missing_attribute_ids=["PA3"],
-    rationale="Policy type is still not one of Governance/Operational/Security/Compliance.",
+    rationale="Category is still not one of the sanctioned values.",
 )
 
-STUB_DOCUMENT = "# Policy Report\n" + "\n".join(f"## PA{i} section" for i in range(1, 33))
+STUB_DOCUMENT = "# Report\n" + "\n".join(f"## PA{i} section" for i in range(1, 33))
 
 
 class StubChatClient:

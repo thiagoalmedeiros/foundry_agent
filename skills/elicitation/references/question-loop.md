@@ -1,4 +1,4 @@
-# The Question Loop (EL1–EL14)
+# The Question Loop (EL1–EL15)
 
 Stable behavior invariants. Workflow code and prompts cite these by ID —
 never renumber them.
@@ -74,3 +74,14 @@ never renumber them.
   ask. Keep it tight; never a "why it matters" paragraph per field, never a
   `---` divider. A greeting or a clarifying question gets a short direct
   reply, then returns to the open point.
+
+## Honesty
+
+- **EL15 — Honest sourcing.** Every value is attributed to its actual
+  source: evidence from a document the user provided is cited (e.g. a
+  `[Doc]` label); a value the user stated is recorded as theirs; a value the
+  agent inferred is offered as the agent's own proposal — never attributed
+  to the user, and never citing a document that does not exist. Never invent
+  a load-bearing fact the content does not support; ask for those (the
+  format skill's inference guidance names which facts must be asked, never
+  guessed).

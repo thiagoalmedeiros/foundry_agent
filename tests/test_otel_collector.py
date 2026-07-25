@@ -92,13 +92,13 @@ def test_span_is_mapped_with_the_stores_encoding(store):
         kind=Span.SPAN_KIND_INTERNAL,
         start_time_unix_nano=1_700_000_000_000_000_000,
         end_time_unix_nano=1_700_000_000_005_000_000,  # +5 ms
-        attributes=[_kv("workflow.name", AnyValue(string_value="policy-report-agent"))],
+        attributes=[_kv("workflow.name", AnyValue(string_value="report-interview-agent"))],
         status=Status(code=Status.STATUS_CODE_OK, message="done"),
     )
     request = ExportTraceServiceRequest(
         resource_spans=[
             ResourceSpans(
-                resource=_service_resource("policy-report-agent"),
+                resource=_service_resource("report-interview-agent"),
                 scope_spans=[ScopeSpans(spans=[span])],
             )
         ]
@@ -110,12 +110,12 @@ def test_span_is_mapped_with_the_stores_encoding(store):
     assert row["trace_id"] == base64.b64encode(_TRACE_ID).decode()
     assert row["span_id"] == base64.b64encode(_SPAN_ID).decode()
     assert row["parent_span_id"] == base64.b64encode(_PARENT_ID).decode()
-    assert row["service_name"] == "policy-report-agent"
+    assert row["service_name"] == "report-interview-agent"
     assert row["kind"] == Span.SPAN_KIND_INTERNAL
     assert row["start_time"] == 1_700_000_000_000  # ns → ms
     assert row["end_time"] == 1_700_000_000_005
     assert row["duration"] == 5
-    assert json.loads(row["attributes"]) == {"workflow.name": "policy-report-agent"}
+    assert json.loads(row["attributes"]) == {"workflow.name": "report-interview-agent"}
     assert row["status_code"] == Status.STATUS_CODE_OK
     assert row["status_message"] == "done"
 

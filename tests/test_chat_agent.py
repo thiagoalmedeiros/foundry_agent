@@ -17,7 +17,7 @@ from foundry_agent.agents import (
     create_validation_agent,
 )
 from foundry_agent.chat_agent import ERROR_REPLY_PREFIX, WorkflowChatAgent, _extract_text
-from foundry_agent.workflow import build_policy_report_workflow
+from foundry_agent.workflow import build_report_workflow
 from tests.conftest import (
     CLOSING_TURN,
     COMPLETE_VALIDATION,
@@ -71,7 +71,7 @@ def _agent(
         validation_client = make_stub_client(COMPLETE_VALIDATION)
         if validation_clients is not None:
             validation_clients.append(validation_client)
-        return build_policy_report_workflow(
+        return build_report_workflow(
             elicitation_agent=create_elicitation_agent(make_elicitation_client(*turns)),
             validation_agent=create_validation_agent(validation_client),
             authoring_agent=create_authoring_agent(make_stub_client(None, text=STUB_DOCUMENT)),
@@ -94,9 +94,9 @@ async def test_a_reply_resumes_the_paused_run_rather_than_restarting_it(
 
     # The opening framing, then the agent's follow-up in the SAME conversation —
     # a restarted run would replay the framing instead.
-    assert "Anchors what this policy is" in await _say(agent, "hi")
+    assert "Anchors what this record is" in await _say(agent, "hi")
     assert "Is this mainly about protecting assets" in await _say(
-        agent, "Remote Work Security Policy"
+        agent, "Sample Record Title"
     )
 
 
@@ -105,11 +105,11 @@ async def test_separate_conversations_do_not_share_state(make_stub_client, make_
 
     await _say(agent, "hi", session="alice")
     assert "Is this mainly about protecting assets" in await _say(
-        agent, "Remote Work Security Policy", session="alice"
+        agent, "Sample Record Title", session="alice"
     )
 
     # Bob's first message opens his own group 1, not alice's follow-up.
-    assert "Anchors what this policy is" in await _say(agent, "hi", session="bob")
+    assert "Anchors what this record is" in await _say(agent, "hi", session="bob")
 
 
 async def test_a_finished_run_returns_the_document_and_frees_the_conversation(
@@ -122,11 +122,11 @@ async def test_a_finished_run_returns_the_document_and_frees_the_conversation(
         turns=(OPEN_TURN, CLOSING_TURN),
     )
 
-    assert "Anchors what this policy is" in await _say(agent, "a full brief")
-    assert "# Policy Report" in await _say(agent, "confirmed")
+    assert "Anchors what this record is" in await _say(agent, "a full brief")
+    assert "# Report" in await _say(agent, "confirmed")
 
     # The conversation was released, so the next message starts fresh.
-    assert "Anchors what this policy is" in await _say(agent, "another brief")
+    assert "Anchors what this record is" in await _say(agent, "another brief")
 
 
 async def test_a_failing_workflow_is_reported_and_reset_not_left_broken():
@@ -154,7 +154,7 @@ async def test_an_uploaded_file_reaches_the_workflow_through_a_chat_turn(
         turns=(OPEN_TURN, CLOSING_TURN),
         validation_clients=validation_clients,
     )
-    assert "Anchors what this policy is" in await _say(agent, "hi")
+    assert "Anchors what this record is" in await _say(agent, "hi")
 
     await _say(
         agent,
@@ -163,7 +163,7 @@ async def test_an_uploaded_file_reaches_the_workflow_through_a_chat_turn(
 
     # The upload was decoded and folded into the content, so validation (the
     # next stage to read run.content fresh) sees the spec, not just the reply.
-    assert "Meridian Remote Work Security Assessment" in validation_clients[0].prompts[-1]
+    assert "Meridian Quarterly Intake Brief" in validation_clients[0].prompts[-1]
 
 
 def test_uploaded_markdown_is_inlined_whole():
@@ -177,9 +177,9 @@ def test_uploaded_markdown_is_inlined_whole():
 
     assert "here is the spec" in extracted
     # Beginning, middle and end all survive — not a truncated preview.
-    assert "Meridian Remote Work Security Assessment" in extracted
-    assert "ticket RW-1408" in extracted
-    assert "Compliance must account for this" in extracted
+    assert "Meridian Quarterly Intake Brief" in extracted
+    assert "must be accounted for" in extracted
+    assert "one-line answer" in extracted
 
 
 def test_uploaded_document_is_long_enough_to_trigger_re_analysis():

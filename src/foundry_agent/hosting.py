@@ -1,6 +1,6 @@
 """Foundry Hosted Agent entrypoint — the production serving path.
 
-Serves the Policy Report workflow through MAF's own hosting package
+Serves the document-authoring workflow through MAF's own hosting package
 (``agent-framework-foundry-hosting``) rather than DevUI: the workflow is
 wrapped in MAF's standard :class:`WorkflowAgent` and handed to
 :class:`ResponsesHostServer`, which exposes an OpenAI-compatible
@@ -13,7 +13,7 @@ lessons.md):
 - **Checkpoints.** The host detects a :class:`WorkflowAgent`, manages its
   checkpoint storage itself (per-user partitioned for multi-tenant safety),
   and *raises* if the workflow already has checkpointing configured. So
-  :func:`~foundry_agent.workflow.create_policy_report_workflow` must stay
+  :func:`~foundry_agent.workflow.create_report_workflow` must stay
   checkpoint-free.
 - **Conversation history.** The host resumes state from the checkpoint keyed
   by ``conversation_id`` / ``previous_response_id``, so no history provider
@@ -64,23 +64,22 @@ from dotenv import load_dotenv
 
 from foundry_agent.chat_agent import WorkflowChatAgent
 from foundry_agent.checkpoint_compat import install_checkpoint_type_allowlist
-from foundry_agent.workflow import DiscoveryCache, create_policy_report_workflow
+from foundry_agent.workflow import DiscoveryCache, create_report_workflow
 
 logger = logging.getLogger(__name__)
 
-AGENT_NAME = "policy-report-agent"
+AGENT_NAME = "report-interview-agent"
 AGENT_DESCRIPTION = (
-    "Policy Report interview: one gap-analysis pass over every field group, one "
-    "agent-paced elicitation conversation, and validation via the "
-    "policy-report-format skill's own script plus adequacy judgment, then the "
-    "assembled Policy Report document."
+    "Document-authoring interview: one gap-analysis pass over every field group, one "
+    "agent-paced elicitation conversation, and validation via the mounted format "
+    "skill's own script plus adequacy judgment, then the assembled document."
 )
 #: Local port for `azd ai agent run`; the hosted platform overrides it.
 DEFAULT_PORT = 8088
 
 
 def create_hosted_agent() -> WorkflowAgent:
-    """Wrap the Policy Report workflow as the agent the host serves.
+    """Wrap the document-authoring workflow as the agent the host serves.
 
     :class:`WorkflowAgent` is MAF's standard workflow-as-agent adapter — the
     host special-cases it for checkpoint restoration, so the workflow must
@@ -91,11 +90,11 @@ def create_hosted_agent() -> WorkflowAgent:
             workflow's chat-client factory).
     """
     # No explicit DiscoveryCache is bound here on purpose: workflow mode builds
-    # the workflow once, so create_policy_report_workflow's own auto-created
+    # the workflow once, so create_report_workflow's own auto-created
     # cache already lives for the whole process. Only the chat paths, which
     # rebuild per conversation, need a cache bound above the factory.
     return WorkflowAgent(
-        create_policy_report_workflow(),
+        create_report_workflow(),
         name=AGENT_NAME,
         description=AGENT_DESCRIPTION,
     )
@@ -113,7 +112,7 @@ def create_hosted_chat_agent() -> WorkflowChatAgent:
     """
     cache = DiscoveryCache()
     return WorkflowChatAgent(
-        lambda: create_policy_report_workflow(discovery_cache=cache),
+        lambda: create_report_workflow(discovery_cache=cache),
         name=AGENT_NAME,
         description=AGENT_DESCRIPTION,
     )
@@ -154,7 +153,7 @@ def _configure_local_otel_defaults() -> None:
 
 
 def main() -> None:
-    """Serve the Policy Report workflow over the Foundry Responses protocol."""
+    """Serve the document-authoring workflow over the Foundry Responses protocol."""
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )

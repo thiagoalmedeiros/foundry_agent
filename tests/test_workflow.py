@@ -1,4 +1,4 @@
-"""The Policy Report interview: discovery, then a per-group conversation.
+"""The document-authoring interview: discovery, then a per-group conversation.
 
 Every chat client is a stub — the tests drive the real workflow graph (the
 per-group walk and its HITL pauses) without live model calls. There is no
@@ -15,7 +15,7 @@ from foundry_agent.models import CaptureStatus, CapturedValue, ConversationTurn
 from foundry_agent.workflow import (
     MATERIAL_HEADING,
     _is_source_material,
-    build_policy_report_workflow,
+    build_report_workflow,
 )
 from tests.conftest import (
     COMPLETE_VALIDATION,
@@ -28,19 +28,19 @@ from tests.conftest import (
 # Per-group turns for the two-group stub (FG1: PA1, PA3 · FG2: PA7, PA11). An
 # "open" turn holds the floor; a "close" turn marks the current group covered.
 _FG1_OPEN = ConversationTurn(
-    message="Anchors what this policy is and how it is classified. What should we call it?",
+    message="Anchors what this record is and how it is classified. What should we call it?",
     conversation_complete=False,
 )
 _FG1_CLOSE = ConversationTurn(
     message="Got the identity — thanks.",
     conversation_complete=True,
     captured=[
-        CapturedValue(attribute_id="PA1", value="Remote Work Security Policy"),
+        CapturedValue(attribute_id="PA1", value="Sample Record Title"),
         CapturedValue(attribute_id="PA3", value="Security"),
     ],
 )
 _FG2_OPEN = ConversationTurn(
-    message="Now the core of the policy: why it exists and the situation demanding it.",
+    message="Now the core of the record: why it exists and the situation demanding it.",
     conversation_complete=False,
 )
 _FG2_CLOSE = ConversationTurn(
@@ -69,7 +69,7 @@ def _workflow(
     }
     if clients is not None:
         clients.update(made)
-    return build_policy_report_workflow(
+    return build_report_workflow(
         elicitation_agent=create_elicitation_agent(made["elicit"]),
         validation_agent=create_validation_agent(made["validation"]),
         authoring_agent=create_authoring_agent(make_stub_client(None, text=STUB_DOCUMENT)),
@@ -88,13 +88,13 @@ async def test_groups_are_elicited_one_at_a_time_before_validation(
 
     result = await workflow.run("hi")
     first = result.get_request_info_events()[0]
-    assert "Anchors what this policy is" in first.data.prompt  # FG1 opens first
+    assert "Anchors what this record is" in first.data.prompt  # FG1 opens first
     assert first.data.run.current_group_index == 0
     assert clients["validation"].calls == 0  # no validation mid-groups
 
-    result = await workflow.run(responses={first.request_id: "Remote Work Security Policy"})
+    result = await workflow.run(responses={first.request_id: "Sample Record Title"})
     second = result.get_request_info_events()[0]
-    assert "core of the policy" in second.data.prompt.lower()  # then FG2
+    assert "core of the record" in second.data.prompt.lower()  # then FG2
     assert second.data.run.current_group_index == 1
     assert clients["validation"].calls == 0  # still no validation
 
@@ -114,7 +114,7 @@ async def test_each_group_prompt_is_scoped_to_that_group(
 
     result = await workflow.run("hi")
     first = result.get_request_info_events()[0]
-    await workflow.run(responses={first.request_id: "Remote Work Security Policy"})
+    await workflow.run(responses={first.request_id: "Sample Record Title"})
 
     fg1_prompt = clients["elicit"].prompts[0]  # opening FG1
     fg2_prompt = clients["elicit"].prompts[2]  # opening FG2
@@ -179,7 +179,7 @@ async def test_captured_values_from_every_group_reach_validation(
     await workflow.run("hi")
 
     validation_prompt = clients["validation"].prompts[-1]
-    assert "PA1 — Remote Work Security Policy" in validation_prompt
+    assert "PA1 — Sample Record Title" in validation_prompt
     assert "PA7 — Purpose text" in validation_prompt
 
 
@@ -211,7 +211,7 @@ async def test_pasted_material_reaches_validation(make_stub_client, make_elicita
 
     validation_prompt = clients["validation"].prompts[-1]
     assert MATERIAL_HEADING in validation_prompt
-    assert "Meridian Remote Work Security Assessment" in validation_prompt
+    assert "Meridian Quarterly Intake Brief" in validation_prompt
 
 
 async def test_unresolved_attributes_reach_the_appendix(

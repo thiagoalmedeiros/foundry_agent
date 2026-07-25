@@ -25,7 +25,7 @@ tasks:
       - uv run --group dev ruff check src/ tests/ main.py
 
   devui:
-    desc: Launch the Agent Framework DevUI serving the full Policy Report workflow (needs AZURE_OPENAI_* env).
+    desc: Launch the Agent Framework DevUI serving the full document-authoring workflow (needs AZURE_OPENAI_* env).
     cmds:
       - uv run python -m foundry_agent.main
 
@@ -105,7 +105,7 @@ tasks:
         fi
 
   hosted:run:
-    desc: Serve the Policy Report workflow over the Foundry Responses protocol (production serving path; needs AZURE_OPENAI_* env). Mirrors `azd ai agent run`. Ensures OTLP is up first.
+    desc: Serve the document-authoring workflow over the Foundry Responses protocol (production serving path; needs AZURE_OPENAI_* env). Mirrors `azd ai agent run`. Ensures OTLP is up first.
     deps: [otel:up]
     env:
       PORT: '{{.HOSTED_PORT}}'
@@ -117,10 +117,10 @@ tasks:
     env:
       # Passed via env (not shell interpolation) so quotes/apostrophes in the
       # message cannot break the command; python builds the JSON body safely.
-      MESSAGE: '{{.MESSAGE | default "Draft a remote-work security policy for a mid-size fintech."}}'
+      MESSAGE: '{{.MESSAGE | default "File an incident report for a residential burglary on Maple St reported this morning."}}'
     cmds:
       - >-
         curl -sS -X POST "http://localhost:{{.HOSTED_PORT}}/responses"
         -H "Content-Type: application/json"
-        -d "$(python3 -c 'import json, os; print(json.dumps({"model": "policy-report-agent", "input": os.environ["MESSAGE"]}))')"
+        -d "$(python3 -c 'import json, os; print(json.dumps({"model": "report-interview-agent", "input": os.environ["MESSAGE"]}))')"
 

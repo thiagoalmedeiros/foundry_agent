@@ -2,8 +2,8 @@
 #
 # Self-contained Foundry agent template on the Microsoft Agent Framework
 # (Python): a staged authoring interview (Gap Analysis → Elicitation →
-# Validation with human-in-the-loop), currently carrying the Policy Report
-# domain declared by the in-repo skills/ directory.
+# Validation with human-in-the-loop), carrying whatever document domain is
+# declared by the in-repo skills/ directory.
 #
 # Run from this directory:
 #   task devui   — launch the DevUI against the workflow
@@ -17,7 +17,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "foundry-agent"
 version = "0.0.1"
-description = "Foundry agent template: Policy Report authoring interview on Microsoft Agent Framework."
+description = "Foundry agent template: document-authoring interview on Microsoft Agent Framework."
 requires-python = ">=3.11"
 dependencies = [
     # Microsoft Agent Framework (public preview) — agents, workflows, Azure OpenAI client

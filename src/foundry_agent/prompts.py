@@ -18,8 +18,8 @@ from foundry_agent.models import FieldGroup
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / "skills"
-#: The format-spec skill: the source of record for the Policy Report document.
-FORMAT_SKILL_NAME = "policy-report-format"
+#: The format-spec skill: the source of record for the document being authored.
+FORMAT_SKILL_NAME = "police-report-format"
 FORMAT_SKILL_DIR = SKILLS_DIR / FORMAT_SKILL_NAME
 #: The generic behavior skill owning the question loop (cadence, EL1-EL14).
 ELICITATION_SKILL_NAME = "elicitation"
@@ -32,30 +32,28 @@ REFERENCES_DIR = FORMAT_SKILL_DIR / "references"
 VALIDATION_SCRIPT_NAME = "validation/validate.py"
 
 #: Reference files inlined per stateless agent — tailored, not one blob, so no
-#: agent pays for material it never consults. Gap analysis includes
-#: definitions.md because its first duty is the policy-type classification
-#: (Governance/Operational/Security/Compliance), whose definitions live there.
+#: agent pays for material it never consults.
 VALIDATION_PACK = ("field-groups", "rules", "characteristics", "validation", "statement-patterns")
 AUTHORING_PACK = ("template", "statement-patterns")
 
 FORMAT_SKILL_INSTRUCTIONS = (
     f"The '{FORMAT_SKILL_NAME}' skill is the single source of truth for every judgment "
-    "you make: its field groups, attributes (PA1-PA32), characteristics (PC1-PC12), "
-    "rules (PR1-PR18), statement patterns, population guidance, and canonical template. "
+    "you make: its field groups, attributes, characteristics, rules, statement patterns, "
+    "population guidance, and canonical template. "
     f"Load it with load_skill('{FORMAT_SKILL_NAME}') and follow its routing table to the "
     "reference file your task needs, reading each file's pre-reads first. Never answer "
-    "from prior knowledge of policy frameworks — if the skill does not say it, it is "
+    "from prior knowledge of the domain — if the skill does not say it, it is "
     "not true here. Preserve every stable identifier (PAn / PCn / PRn / FGn) exactly."
 )
 
 INLINE_REFERENCE_INSTRUCTIONS = (
     "The REFERENCE MATERIAL section at the end of these instructions — taken verbatim "
     f"from the '{FORMAT_SKILL_NAME}' skill — is the single source of truth for every "
-    "judgment you make: field groups, attributes (PA1-PA32), characteristics (PC1-PC12), "
-    "rules (PR1-PR18), statement patterns, population guidance, and the canonical "
-    "template, as applicable to your task. Never answer from prior knowledge of policy "
-    "frameworks — if the reference material does not say it, it is not true here. "
-    "Preserve every stable identifier (PAn / PCn / PRn / FGn) exactly."
+    "judgment you make: field groups, attributes, characteristics, rules, statement "
+    "patterns, population guidance, and the canonical template, as applicable to your "
+    "task. Never answer from prior knowledge of the domain — if the reference material "
+    "does not say it, it is not true here. Preserve every stable identifier "
+    "(PAn / PCn / PRn / FGn) exactly."
 )
 
 
@@ -75,7 +73,7 @@ def _skill_pack(reference_names: tuple[str, ...]) -> str:
         for name in reference_names
     ]
     return (
-        "\n\n=== REFERENCE MATERIAL (policy-report-format skill, verbatim) ===\n\n"
+        f"\n\n=== REFERENCE MATERIAL ({FORMAT_SKILL_NAME} skill, verbatim) ===\n\n"
         + "\n\n".join(sections)
     )
 
@@ -95,49 +93,31 @@ DISCOVERY_INSTRUCTIONS = (
 )
 
 ELICITATION_INSTRUCTIONS = (
-    "You are the Elicitation agent for Policy Report authoring.\n"
+    "You are the Elicitation agent for document authoring.\n"
     f"{FORMAT_SKILL_INSTRUCTIONS}\n"
-    f"Load the '{ELICITATION_SKILL_NAME}' skill for its persona, tone, cadence, and "
-    "per-answer invariants (EL1-EL14). This workflow clarifies the document ONE field "
-    "group at a time (EL4): each prompt names the CURRENT group — its framing line, its "
-    "fields, and its Adequacy rules — plus the content gathered so far. Drive a natural, "
-    "multi-turn conversation to satisfy THIS group, then set conversation_complete=true "
-    "so the interview moves on to the next group.\n"
-    "Work from the content, and keep each turn fast:\n"
-    "- Judge only the user's LATEST message against THIS group's Adequacy — do not "
-    "re-analyse the whole document every turn. A greeting, a thank-you, or a clarifying "
-    "question ('what do you mean?', 'why do you need this?') gets a short, direct reply "
-    "and a return to the open point — not a deep re-derivation.\n"
-    "- Infer what the content already supports for this group's fields and present it for "
-    "a light confirmation (EL13); ask plainly for what is genuinely missing. A defensible "
-    "inferred value the user can correct in one word beats a question — but NEVER invent a "
-    "load-bearing fact the content does not support (an effective date, a named regulatory "
-    "instrument, an owner role with no basis); ask for those (see the format skill's "
-    "inference guidance).\n"
-    "- Attribute each value honestly by its ACTUAL source: (a) evidence from a document the "
-    "user pasted — cite it with the [Doc] label; (b) something the user stated — say what "
-    "they told you; (c) a value YOU inferred — present it as your own proposal ('I've "
-    "drafted…', 'a suggested value is…'). NEVER attribute an inferred value to the user, "
-    "and never label [Doc] when no such document exists.\n"
-    "- When a field is a classification or a fork the format skill says drives conditional "
-    "requirements, name the candidate answers, say which you favour with a short reason, "
-    "and let the user confirm or pick — the analysis is yours, the choice is theirs.\n"
-    "- NEVER surface attribute IDs, field-group codes, or rule IDs to the user (EL10); use "
-    "plain stakeholder names.\n"
-    "Judge every reply against the format skill's rules (EL5): a reply does not close a "
-    "point just by arriving. When the user is stuck, apply Socratic assist; when an answer "
-    "does not fit, apply coach-on-mismatch (EL11); after honest attempts, record a point "
-    "unresolved and move on (EL6) so the group always terminates. Return `captured` for "
-    "this group CUMULATIVELY, keyed by exact attribute IDs (EL7) — every value settled for "
-    "the group so far, including earlier turns. Set conversation_complete=true only when "
-    "THIS group's Adequacy is satisfied or its open points are recorded unresolved — never "
-    "merely because the user replied."
+    f"Load the '{ELICITATION_SKILL_NAME}' skill and follow its question-loop invariants "
+    "(EL1-EL15: persona, tone, judged capture, follow-up budget, Socratic assist, "
+    "coach-on-mismatch, confirm-inferred, no internal IDs, honest sourcing) — they govern "
+    "HOW you elicit; this prompt only wires the workflow around them.\n"
+    "Cadence override (EL4): clarify ONE field group per prompt. Each prompt names the "
+    "CURRENT group — its framing line, its fields, and its Adequacy — plus the content so "
+    "far; drive a natural multi-turn conversation to satisfy THIS group, then set "
+    "conversation_complete=true to advance.\n"
+    "- Judge only the user's LATEST message against THIS group's Adequacy — do not re-analyse "
+    "the whole document each turn; keep turns fast.\n"
+    "- Infer what the content supports and present it for a light confirmation; attribute "
+    "every value to its real source ([Doc] / user-stated / your own proposal — EL15). NEVER "
+    "invent a load-bearing fact the content does not support; ask for those (the format "
+    "skill's inference guidance).\n"
+    "Return `captured` for this group CUMULATIVELY, keyed by exact attribute IDs (EL7). Set "
+    "conversation_complete=true only when THIS group's Adequacy is satisfied or its open "
+    "points are recorded unresolved (EL6) — never merely because the user replied."
 )
 
 VALIDATION_INSTRUCTIONS = (
-    "You are the Validation agent for Policy Report authoring.\n"
+    "You are the Validation agent for document authoring.\n"
     f"{INLINE_REFERENCE_INSTRUCTIONS}\n"
-    "You receive candidate Policy Report content (original input merged with captured "
+    "You receive candidate document content (original input merged with captured "
     "answers) covering every field group. Two duties, in this order:\n"
     "1. DETERMINISTIC PRESENCE CHECK — ALWAYS run the format skill's own validation "
     "script before judging anything; never skip it or guess its result. Call the "
@@ -145,11 +125,11 @@ VALIDATION_INSTRUCTIONS = (
     f"script_name='{VALIDATION_SCRIPT_NAME}', and args as a LIST of exactly two JSON "
     "strings: FIRST the captured values — the current value of every attribute the "
     "candidate content populates, keyed by its exact attribute id (e.g. "
-    "'{\"PA1\": \"POL-SEC-001\", \"PA2\": \"Remote Work Security Policy\"}') — SECOND "
+    "'{\"PA1\": \"<value>\", \"PA2\": \"<value>\"}') — SECOND "
     "the field groups from your scope, each as an object with its attribute ids (e.g. "
     "'[{\"attribute_ids\": [\"PA1\", \"PA2\", \"PA3\"]}]'). The script runs the skill's "
-    "deterministic rules — required-field presence, placeholders, format rules such as "
-    "a title word cap — and returns the attribute ids that fail them.\n"
+    "deterministic rules — required-field presence, placeholders, and the format rules "
+    "the skill declares — and returns the attribute ids that fail them.\n"
     "2. ADEQUACY JUDGMENT — on top of the tool's result, apply the skill's substantive "
     "adequacy rules from the Field Groups reference and the underlying characteristic "
     "(PC) and rule (PR) checks. Treat a conditional attribute as required only when its "
@@ -163,10 +143,10 @@ VALIDATION_INSTRUCTIONS = (
 )
 
 AUTHORING_INSTRUCTIONS = (
-    "You are the Authoring agent for Policy Report authoring.\n"
+    "You are the Authoring agent for document authoring.\n"
     f"{INLINE_REFERENCE_INSTRUCTIONS}\n"
-    "You receive validated candidate Policy Report content. Write the complete Policy "
-    "Report as Markdown following the canonical template in the Template "
+    "You receive validated candidate document content. Write the complete document "
+    "as Markdown following the canonical template in the Template "
     "reference — same sections, same order, every attribute populated from the "
     "candidate content. Follow the template as given; do not invent a structure. "
     "Output only the document."

@@ -3,7 +3,7 @@
 These models are passed as ``response_format`` to agent runs — the standard
 Agent Framework structured-output mechanism. They describe the *agents'*
 judgments, never the format itself: field groups, attributes, and rules are
-read at runtime out of the ``policy-report-format`` skill (see
+read at runtime out of the mounted format skill (see
 :mod:`foundry_agent.agents`), so re-clustering a group in the skill changes
 this workflow's behaviour with no code change.
 """
@@ -17,7 +17,7 @@ class Severity(str, Enum):
     """Whether a finding blocks completion or is advisory only.
 
     Missing required attributes block; characteristic (PC) and rule (PR)
-    quality findings are advisory per the plan's termination policy.
+    quality findings are advisory per the plan's termination rule.
     """
 
     BLOCKING = "blocking"
@@ -91,13 +91,12 @@ class ConversationTurn(BaseModel):
 
 
 class FieldGroup(BaseModel):
-    """One field group exactly as the policy-report-format skill declares it."""
+    """One field group exactly as the mounted format skill declares it."""
 
     group_id: str = Field(description="The group's ID as written, e.g. 'FG1'.")
-    name: str = Field(description="The group's name, e.g. 'Identification & Classification'.")
+    name: str = Field(description="The group's name as the skill declares it.")
     heading: str = Field(
-        description="The group's heading verbatim, "
-        "e.g. '### FG1 — Identification & Classification'."
+        description="The group's heading verbatim, e.g. '### FG1 — <group name>'."
     )
     framing: str = Field(
         description="The group's **Framing:** line verbatim — elicitation opens the "

@@ -21,7 +21,7 @@ from tests.conftest import GROUPS
 _FG1 = GROUPS.groups[0]  # Identification & Classification (PA1, PA3)
 
 _OPEN_TURN = ConversationTurn(
-    message="Anchors what this policy is and how it is classified.\n\nWhat should we call it?",
+    message="Anchors what this record is and how it is classified.\n\nWhat should we call it?",
     conversation_complete=False,
     captured=[],
 )
@@ -30,7 +30,7 @@ _CLOSING_TURN = ConversationTurn(
     message="That covers this group — thank you.",
     conversation_complete=True,
     captured=[
-        CapturedValue(attribute_id="PA1", value="POL-SEC-001"),
+        CapturedValue(attribute_id="PA1", value="REC-001"),
         CapturedValue(attribute_id="PA3", value="Security"),
     ],
 )
@@ -72,13 +72,13 @@ async def test_continue_feeds_the_reply_for_cumulative_capture(make_stub_client)
     agent, session = _session(client)
 
     await continue_group_conversation(
-        agent, session, _FG1, [], "POL-SEC-001, and it's a Security policy."
+        agent, session, _FG1, [], "REC-001, and it's a Category A record."
     )
 
     prompt = client.prompts[-1]
     assert "The user replied" in prompt
     assert "CUMULATIVELY" in prompt
-    assert "POL-SEC-001, and it's a Security policy." in prompt
+    assert "REC-001, and it's a Category A record." in prompt
 
 
 async def test_the_conversation_is_multi_turn_on_one_session(make_stub_client):
@@ -88,12 +88,12 @@ async def test_the_conversation_is_multi_turn_on_one_session(make_stub_client):
     agent, session = _session(client)
 
     await open_group_conversation(agent, session, _FG1, "content")
-    await continue_group_conversation(agent, session, _FG1, [], "POL-SEC-001, Security.")
+    await continue_group_conversation(agent, session, _FG1, [], "REC-001, Security.")
 
     assert client.calls == 2
     replayed = client.prompts[-1]
     assert _FG1.framing_line() in replayed  # the opening turn, replayed via the session
-    assert "POL-SEC-001, Security." in replayed
+    assert "REC-001, Security." in replayed
 
 
 async def test_continue_closes_when_the_group_is_covered(make_stub_client):
@@ -160,10 +160,10 @@ async def test_the_elicitation_turn_runs_at_low_reasoning_effort(make_stub_clien
 def test_elicitation_instructions_forbid_inventing_load_bearing_facts():
     """Elicitation now owns inference, so the must-ask guardrail lives on its instructions.
 
-    The generic discipline is in code; the specific must-ask fields (PA10 etc.)
-    stay in the format skill's inference guidance, mounted by the agent.
+    The generic discipline is in code; the specific must-ask fields stay in the
+    format skill's inference guidance, mounted by the agent — never in the prompt.
     """
     text = ELICITATION_INSTRUCTIONS.lower()
     assert "never invent" in text
+    assert "load-bearing fact" in text
     assert "ask for those" in text
-    assert "effective date" in text

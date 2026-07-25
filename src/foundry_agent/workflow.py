@@ -1,7 +1,7 @@
-"""The Policy Report interview: discovery, then a per-group conversation.
+"""The document-authoring interview: discovery, then a per-group conversation.
 
-Discovery reads the ``policy-report-format`` skill's field groups (FG1-FG8)
-once. The interview then flows through one linear pipeline::
+Discovery reads the mounted format skill's field groups once. The interview
+then flows through one linear pipeline::
 
     discovery -> elicitation -> validation -> assembler
 
@@ -90,7 +90,7 @@ SOURCE_MATERIAL_LINES = 10
 MATERIAL_HEADING = "## Additional material provided"
 
 #: Hard cap on any single user input (initial message or one reply). A real
-#: Policy Report document is ~12 KB (the sample input is 11.5 KB); this leaves ample
+#: assembled document is ~12 KB (the sample input is 11.5 KB); this leaves ample
 #: headroom while bounding a cost-DoS — an oversized paste would otherwise be
 #: folded into ``run.content`` and re-sent on every later model call. Oversized
 #: input is truncated (with a visible marker) rather than rejected, so the
@@ -409,7 +409,7 @@ class AssemblerExecutor(Executor):
 
     @handler
     async def assemble(self, message: Assemble, ctx: WorkflowContext[str, str]) -> None:
-        """Author the Policy Report and yield it."""
+        """Author the document and yield it."""
         document = await author_document(self._agent, message.run.content, usage=self._usage)
         if self._usage is not None:
             logger.info("%s", self._usage.summary())
@@ -505,7 +505,7 @@ def _is_source_material(answer: str) -> bool:
     return len(answer) >= SOURCE_MATERIAL_CHARS or answer.count("\n") >= SOURCE_MATERIAL_LINES
 
 
-def build_policy_report_workflow(
+def build_report_workflow(
     *,
     elicitation_agent: Agent,
     validation_agent: Agent,
@@ -538,9 +538,9 @@ def build_policy_report_workflow(
     assembler = AssemblerExecutor(authoring_agent, usage=usage)
     return (
         WorkflowBuilder(
-            name="policy-report-agent",
+            name="report-interview-agent",
             description=(
-                "Policy Report interview: discovery reads the policy-report-format "
+                "Document-authoring interview: discovery reads the mounted format "
                 "skill's groups, elicitation clarifies each group in turn as a natural "
                 "conversation, then a single validation pass runs the skill's own script "
                 "plus adequacy judgment before the assembler writes the document."
@@ -558,7 +558,7 @@ def build_policy_report_workflow(
     )
 
 
-def create_policy_report_workflow(
+def create_report_workflow(
     discovery_cache: DiscoveryCache | None = None,
 ) -> Workflow:
     """Build the interview with live Azure OpenAI agents (env-configured).
@@ -581,7 +581,7 @@ def create_policy_report_workflow(
             "skill mounted by this workflow must provide one (run via run_skill_script)"
         )
     client = create_chat_client()
-    return build_policy_report_workflow(
+    return build_report_workflow(
         discovery_agent=create_discovery_agent(client),
         elicitation_agent=create_elicitation_agent(client),
         validation_agent=create_validation_agent(client),

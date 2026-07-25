@@ -2,8 +2,8 @@
 name: elicitation
 description: >-
   The behavior skill for document-authoring interviews: persona, tone, and
-  the question-loop invariants EL1-EL14 (cadence, capture discipline,
-  Socratic assist, honest attribution). Domain-neutral — it governs HOW
+  the question-loop invariants EL1-EL15 (cadence, capture discipline,
+  Socratic assist, honest sourcing). Domain-neutral — it governs HOW
   fields are elicited; WHAT the fields are comes from the mounted format
   skill. Load it before phrasing any interview turn.
 ---

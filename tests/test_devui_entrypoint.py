@@ -2,7 +2,7 @@
 
 import os
 
-from foundry_agent.workflow import create_policy_report_workflow
+from foundry_agent.workflow import create_report_workflow
 
 _FAKE_ENV = {
     "AZURE_OPENAI_ENDPOINT": "https://example.openai.azure.com/",
@@ -11,13 +11,13 @@ _FAKE_ENV = {
 }
 
 
-def test_create_policy_report_workflow_builds_all_stages(monkeypatch):
+def test_create_report_workflow_builds_all_stages(monkeypatch):
     for key, value in _FAKE_ENV.items():
         monkeypatch.setenv(key, value)
 
-    workflow = create_policy_report_workflow()
+    workflow = create_report_workflow()
 
-    assert workflow.name == "policy-report-agent"
+    assert workflow.name == "report-interview-agent"
     # No gap-analysis stage: discovery hands straight to elicitation.
     assert {
         "discovery",
@@ -34,9 +34,9 @@ def test_devui_entrypoint_serves_the_workflow_as_a_chat_agent(monkeypatch):
 
     from foundry_agent import main
 
-    agent = main.create_policy_report_agent()
+    agent = main.create_report_agent()
 
-    assert agent.name == "policy-report-agent"
+    assert agent.name == "report-interview-agent"
     assert callable(main.main)
     assert main.DEVUI_PORT == 8090
 
@@ -52,9 +52,9 @@ def test_devui_entrypoint_binds_one_shared_discovery_cache(monkeypatch):
         seen.append(discovery_cache)
         return object()  # a stand-in workflow; the wrapper only stores the factory
 
-    monkeypatch.setattr(main, "create_policy_report_workflow", _recording_factory)
+    monkeypatch.setattr(main, "create_report_workflow", _recording_factory)
 
-    factory = main.create_policy_report_agent()._workflow_factory
+    factory = main.create_report_agent()._workflow_factory
     factory()
     factory()
 

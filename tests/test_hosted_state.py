@@ -21,7 +21,7 @@ from foundry_agent.agents import (
     create_elicitation_agent,
     create_validation_agent,
 )
-from foundry_agent.workflow import build_policy_report_workflow
+from foundry_agent.workflow import build_report_workflow
 from tests.conftest import (
     CLOSING_TURN,
     COMPLETE_VALIDATION,
@@ -32,7 +32,7 @@ from tests.conftest import (
 
 
 def _workflow(make_stub_client, make_elicitation_client):
-    return build_policy_report_workflow(
+    return build_report_workflow(
         elicitation_agent=create_elicitation_agent(
             make_elicitation_client(OPEN_TURN, CLOSING_TURN)
         ),
@@ -54,7 +54,7 @@ def test_the_production_workflow_carries_no_checkpointing(
 def test_a_self_checkpointing_workflow_is_rejected_by_the_host(tmp_path):
     """Pins WHY the guardrail exists: the host rejects self-managed checkpoints.
 
-    Built inline rather than through ``build_policy_report_workflow`` — the
+    Built inline rather than through ``build_report_workflow`` — the
     production factory must never learn to take checkpoint storage, so the
     counter-example is constructed here instead. If a future package version
     stops raising, this test fails and the guardrail above can be

@@ -28,7 +28,7 @@ async def test_elicitation_requests_carry_the_elicitation_key(make_stub_client):
 
     await open_group_conversation(agent, agent.create_session(), GROUPS.groups[0], "content")
 
-    assert client.options["prompt_cache_key"] == "policy-report-agent:elicitation"
+    assert client.options["prompt_cache_key"] == "report-interview-agent:elicitation"
 
 
 async def test_validation_requests_carry_the_validation_key(make_stub_client):
@@ -36,7 +36,7 @@ async def test_validation_requests_carry_the_validation_key(make_stub_client):
 
     await validate_document(create_validation_agent(client), "any input", GROUPS.groups)
 
-    assert client.options["prompt_cache_key"] == "policy-report-agent:validation"
+    assert client.options["prompt_cache_key"] == "report-interview-agent:validation"
 
 
 async def test_authoring_requests_carry_the_authoring_key(make_stub_client):
@@ -44,4 +44,4 @@ async def test_authoring_requests_carry_the_authoring_key(make_stub_client):
 
     await author_document(create_authoring_agent(client), "validated content")
 
-    assert client.options["prompt_cache_key"] == "policy-report-agent:authoring"
+    assert client.options["prompt_cache_key"] == "report-interview-agent:authoring"

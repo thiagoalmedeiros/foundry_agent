@@ -25,9 +25,9 @@ def test_finding_defaults_to_advisory_severity():
 
 def test_conversation_turn_round_trips_through_json():
     turn = ConversationTurn(
-        message="What should we call this policy?",
+        message="What should we call this record?",
         conversation_complete=False,
-        captured=[CapturedValue(attribute_id="PA1", value="POL-SEC-001")],
+        captured=[CapturedValue(attribute_id="PA1", value="REC-001")],
     )
 
     restored = ConversationTurn.model_validate_json(turn.model_dump_json())

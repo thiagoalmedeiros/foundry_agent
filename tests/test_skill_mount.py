@@ -1,4 +1,4 @@
-"""The Policy Report format lives in skill files — reaching agents two ways, never in code.
+"""The mounted format lives in skill files — reaching agents two ways, never in code.
 
 The elicitation agent keeps MAF progressive disclosure (its multi-turn session
 amortizes what it loads). The stateless agents — validation and authoring —
@@ -45,13 +45,17 @@ def test_both_skills_exist_on_disk_with_a_skill_md():
 
 
 def test_the_format_skill_owns_the_field_groups_the_interview_walks():
-    """The group sequence is content, not code — it must be readable from the skill."""
+    """The group sequence is content, not code — it must be readable from the skill.
+
+    Asserted domain-neutrally: whatever format skill is mounted, its field-groups
+    reference declares an ``### FG1 —`` heading and closes with the coverage line.
+    """
     field_groups = (FORMAT_SKILL_DIR / "references" / "field-groups.md").read_text(
         encoding="utf-8"
     )
 
-    assert "### FG1 — Identification & Classification" in field_groups
-    assert "All 32 attributes are covered exactly once." in field_groups
+    assert "### FG1 —" in field_groups
+    assert "covered exactly once." in field_groups
 
 
 async def test_the_elicitation_agent_keeps_progressive_disclosure(make_stub_client):
@@ -125,18 +129,31 @@ async def test_only_the_elicitation_agent_carries_the_behavior_skill(make_stub_c
     assert ELICITATION_SKILL_NAME not in validation_client.options["instructions"]
 
 
+def _first_attribute_name() -> str:
+    """The human name in the first ``| PAn | <name> | …`` row of the mounted skill."""
+    for line in (REFERENCES_DIR / "attributes.md").read_text(encoding="utf-8").splitlines():
+        cells = [cell.strip() for cell in line.split("|")]
+        if len(cells) >= 4 and cells[1].startswith("PA") and cells[1][2:].isdigit():
+            return cells[2]
+    return ""
+
+
 async def test_the_elicitation_agent_does_not_hardcode_attribute_definitions(
     make_stub_client,
 ):
-    """Elicitation's own instructions may cite ID ranges, never attribute prose.
+    """Elicitation's own instructions never restate the skill's attribute prose.
 
-    The stateless agents now inline the reference files verbatim by design —
-    for them the guarantee is verbatim-from-file (pinned above), not absence.
+    Domain-neutral: a distinctive attribute name from whatever format skill is
+    mounted must not appear in the prompt — the elicitation agent reads it via
+    load_skill, not by inlining. The stateless agents DO inline the reference
+    files verbatim by design (pinned above); for elicitation the guarantee is
+    absence.
     """
     client = make_stub_client(GROUPS)
 
     await _run_once(create_elicitation_agent(client))
 
     instructions = client.options["instructions"]
-    assert "Scope of Application" not in instructions
-    assert "Non-Compliance Consequences" not in instructions
+    first_name = _first_attribute_name()
+    assert first_name, "no attribute name parsed from the mounted skill"
+    assert first_name not in instructions

@@ -1,4 +1,4 @@
-"""DevUI entrypoint serving the Policy Report workflow as a chat agent.
+"""DevUI entrypoint serving the document-authoring workflow as a chat agent.
 
 Run ``task devui`` (or ``python -m foundry_agent.main``). Requires the
 AZURE_OPENAI_* variables — resolved by ``load_dotenv`` from this package's
@@ -21,19 +21,19 @@ from agent_framework.devui import serve
 from dotenv import load_dotenv
 
 from foundry_agent.chat_agent import WorkflowChatAgent
-from foundry_agent.workflow import DiscoveryCache, create_policy_report_workflow
+from foundry_agent.workflow import DiscoveryCache, create_report_workflow
 
 DEVUI_PORT = 8090
 
-AGENT_NAME = "policy-report-agent"
+AGENT_NAME = "report-interview-agent"
 AGENT_DESCRIPTION = (
-    "Policy Report flow: discovery, one gap-analysis pass, an agent-paced "
+    "Document-authoring flow: discovery, one gap-analysis pass, an agent-paced "
     "elicitation conversation confirming what was inferred and asking the rest, "
-    "validation, then the assembled Policy Report document."
+    "validation, then the assembled document."
 )
 
 
-def create_policy_report_agent() -> WorkflowChatAgent:
+def create_report_agent() -> WorkflowChatAgent:
     """Wrap the workflow as the chat agent DevUI hosts.
 
     DevUI builds a fresh workflow per conversation (via the factory), so one
@@ -42,7 +42,7 @@ def create_policy_report_agent() -> WorkflowChatAgent:
     """
     cache = DiscoveryCache()
     return WorkflowChatAgent(
-        lambda: create_policy_report_workflow(discovery_cache=cache),
+        lambda: create_report_workflow(discovery_cache=cache),
         name=AGENT_NAME,
         description=AGENT_DESCRIPTION,
     )
@@ -93,7 +93,7 @@ def _prepare_instrumentation() -> bool:
 
 
 def main() -> None:
-    """Serve the Policy Report workflow in DevUI.
+    """Serve the document-authoring workflow in DevUI.
 
     Default: the workflow is served as a chat agent (each elicitation pause reads
     as assistant text). Pass ``--workflow`` to serve the RAW :class:`Workflow`
@@ -130,7 +130,7 @@ def main() -> None:
         "of the chat agent, to inspect how the internal graph executes.",
     )
     args = parser.parse_args()
-    entity = create_policy_report_workflow() if args.workflow else create_policy_report_agent()
+    entity = create_report_workflow() if args.workflow else create_report_agent()
     # auth_enabled=False: DevUI's default dev-token auth 401s the auto-opened
     # browser (it never receives the token); the server binds to 127.0.0.1 only.
     serve(

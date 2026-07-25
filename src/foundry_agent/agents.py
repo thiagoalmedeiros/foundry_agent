@@ -1,9 +1,9 @@
-"""Agent definitions over the policy-report-format skill's content.
+"""Agent definitions over the mounted format skill's content.
 
-The agents hold no domain knowledge in code. Everything about what a Policy Report
+The agents hold no domain knowledge in code. Everything about what the document
 *is* — its field groups, attributes, characteristics, rules, statement patterns,
-population and inference guidance, the canonical template — lives in the
-``policy-report-format`` skill, and reaches each agent one of two ways:
+population and inference guidance, the canonical template — lives in the mounted
+format skill, and reaches each agent one of two ways:
 
 - The **elicitation** agent keeps MAF progressive disclosure: a
   :class:`SkillsProvider` mounts the format skill plus the generic
@@ -84,7 +84,7 @@ logger = logging.getLogger(__name__)
 #: supported on the v1 API surface MAF's client uses (Microsoft Learn
 #: prompt-caching guide, updated 2026-07-17); Batch 4's measured
 #: ``cached_tokens`` decides whether this earns its keep.
-_CACHE_KEY_PREFIX = "policy-report-agent"
+_CACHE_KEY_PREFIX = "report-interview-agent"
 
 
 def _cache_key(stage: str) -> str:
@@ -157,7 +157,7 @@ async def _run_python_skill_script(
 
 
 def create_skills(paths: list[Path]) -> SkillsProvider:
-    """Mount the policy skills an agent may load, via MAF progressive disclosure.
+    """Mount the skills an agent may load, via MAF progressive disclosure.
 
     The provider advertises each skill's name and description in the system
     prompt and offers ``load_skill`` / ``read_skill_resource`` /
@@ -170,7 +170,7 @@ def create_skills(paths: list[Path]) -> SkillsProvider:
         FileSkillsSource(
             [str(path) for path in paths], script_runner=_run_python_skill_script
         ),
-        source_id="policy_skills",
+        source_id="report_skills",
         disable_load_skill_approval=True,
         disable_read_skill_resource_approval=True,
         disable_run_skill_script_approval=True,
@@ -313,7 +313,7 @@ def create_authoring_agent(client: SupportsChatGetResponse) -> Agent:
         client,
         f"{AUTHORING_INSTRUCTIONS}{_skill_pack(AUTHORING_PACK)}",
         name="authoring",
-        description="Writes the final Policy Report per the canonical template.",
+        description="Writes the final document per the canonical template.",
     )
 
 
@@ -488,7 +488,7 @@ async def validate_document(
     """
     prompt = (
         f"{_all_groups_scope(groups)}\n\n"
-        f"Candidate Policy Report content:\n---\n{candidate_text}"
+        f"Candidate document content:\n---\n{candidate_text}"
     )
     response = await agent.run(
         prompt,
@@ -511,7 +511,7 @@ async def validate_document(
 async def author_document(
     agent: Agent, candidate_text: str, usage: RunUsage | None = None
 ) -> str:
-    """Write the final Policy Report from validated candidate content."""
+    """Write the final document from validated candidate content."""
     response = await agent.run(
         candidate_text, options=ChatOptions(prompt_cache_key=_cache_key("authoring"))
     )

@@ -1,7 +1,7 @@
 """The hosted serving path: MAF's WorkflowAgent + ResponsesHostServer.
 
 The spike these tests pin (the predecessor project's production-readiness spike)
-is that the Policy Report workflow can be served by MAF's own hosting package
+is that the document-authoring workflow can be served by MAF's own hosting package
 without a bespoke chat wrapper — and, crucially, that a human-in-the-loop
 elicitation pause survives the translation, because the whole interview
 depends on it.
@@ -22,7 +22,7 @@ from foundry_agent.agents import (
 )
 from foundry_agent.chat_agent import WorkflowChatAgent
 from foundry_agent.hosting import AGENT_NAME, create_hosted_agent, create_hosted_chat_agent
-from foundry_agent.workflow import build_policy_report_workflow
+from foundry_agent.workflow import build_report_workflow
 from tests.conftest import (
     CLOSING_TURN,
     COMPLETE_VALIDATION,
@@ -40,7 +40,7 @@ _FAKE_ENV = {
 
 def _stub_workflow(make_stub_client, make_elicitation_client):
     """The real workflow graph over stubbed chat clients."""
-    return build_policy_report_workflow(
+    return build_report_workflow(
         elicitation_agent=create_elicitation_agent(
             make_elicitation_client(OPEN_TURN, CLOSING_TURN)
         ),
@@ -81,7 +81,7 @@ def test_hosted_chat_agent_binds_one_shared_discovery_cache(monkeypatch):
         seen.append(discovery_cache)
         return object()  # a stand-in workflow; the wrapper only stores the factory
 
-    monkeypatch.setattr(hosting, "create_policy_report_workflow", _recording_factory)
+    monkeypatch.setattr(hosting, "create_report_workflow", _recording_factory)
 
     factory = create_hosted_chat_agent()._workflow_factory
     factory()
@@ -136,4 +136,4 @@ async def test_an_elicitation_pause_becomes_a_request_info_function_call(
         if getattr(content, "name", None) == WorkflowAgent.REQUEST_INFO_FUNCTION_NAME
     ]
     assert calls, "the elicitation pause did not surface as a request_info function call"
-    assert "Anchors what this policy is" in str(calls[0].arguments)
+    assert "Anchors what this record is" in str(calls[0].arguments)

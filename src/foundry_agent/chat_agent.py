@@ -1,4 +1,4 @@
-"""Expose the Policy Report workflow as a conversational chat agent for DevUI.
+"""Expose the document-authoring workflow as a conversational chat agent for DevUI.
 
 Served raw, DevUI renders a :class:`~agent_framework.Workflow` as a run-form
 plus a typed HITL panel. That surfaces the stage graph nicely, but each
@@ -119,7 +119,7 @@ class _Conversation:
 
 
 class WorkflowChatAgent(BaseAgent):
-    """Drive a Policy Report workflow through multi-turn chat text.
+    """Drive a document-authoring workflow through multi-turn chat text.
 
     Args:
         workflow_factory: Builds a fresh workflow instance per conversation.
