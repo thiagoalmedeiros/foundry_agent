@@ -122,6 +122,8 @@ src/foundry_agent/
 ├── workflow.py                 # Flow 1 (graph API): discovery → elicitation → validation → assembler
 ├── workflow_functional.py      # Flow 2 (functional API): same flow + deterministic validate.py gate loop
 ├── chat_agent.py               # drives the workflow over chat turns; per-turn checkpoints + restart resume
+├── chat_agent_functional.py    # serves Flow 2 as a DevUI chat (pauses as text); in-memory, no checkpoints
+
 ├── agents.py                   # 4 agents, skill packs + skill mounts, client factory, script runner
 ├── prompts.py                  # everything the agents are told: instructions, packs, per-turn clauses
 ├── usage.py                    # per-stage token accounting + OTel span annotation
@@ -246,6 +248,10 @@ them directly:
   into the appendix. The functional API expresses that termination loop far more
   readably, at the cost of HITL resume semantics that replay from the top of the
   run — so each `request_info` lives inside a `@step`, letting a resolved pause
-  be cached and short-circuited on replay. Flow 2 is exposed for the local DevUI
-  showcase via `.as_agent()`; hosted serving and per-conversation isolation for
-  it are a deferred follow-up, so Flow 1 stays the production default.
+  be cached and short-circuited on replay. Flow 2 is served as a **chat agent**
+  ([`chat_agent_functional.py`](src/foundry_agent/chat_agent_functional.py)), so
+  each elicitation pause reads as ordinary assistant text rather than a DevUI
+  "Approval Required" panel — the functional analogue of `WorkflowChatAgent`,
+  holding one workflow **per conversation in memory** (so conversations are
+  isolated) with no checkpoint storage. Hosted serving and restart-resume for
+  Flow 2 remain a deferred follow-up, so Flow 1 stays the production default.
