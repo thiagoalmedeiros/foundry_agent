@@ -13,6 +13,18 @@ System design and structure. Working instructions live in
   (EL6) guarantees each group terminates, and unresolved required
   attributes are banked into an advisory appendix. `MAX_USER_INPUT_CHARS`
   bounds any single input.
+- **Functional workflow / Flow 2** (`src/foundry_agent/workflow_functional.py`)
+  — the MAF functional-API sibling of the graph engine: the same Discovery →
+  Elicitation → Assembler flow written as a plain `async @workflow` with
+  `@step` calls, but its validation stage is a **deterministic script gate**
+  rather than an LLM agent. After the first group walk, the skill's own
+  `validate.py` runs as a subprocess (`run_validation_gate`); while it reports
+  missing required attributes the loop re-opens only the groups that own them,
+  halting when the script passes or after `FLOW2_MAX_CYCLES` (default 40) —
+  residual gaps bank into the same advisory appendix. Each `request_info`
+  lives inside a `@step` so the functional API's replay-from-top resume
+  short-circuits resolved pauses. Flow 1 stays the production/hosted default;
+  Flow 2 is exposed for the DevUI showcase (`main.py --functional`).
 - **Agents** (`src/foundry_agent/agents.py`) — four agents (discovery,
   elicitation, validation, authoring) over one chat client factory.
   Discovery and elicitation use MAF progressive disclosure
@@ -20,7 +32,9 @@ System design and structure. Working instructions live in
   per-agent reference packs from the same skill files; validation
   additionally mounts the skill provider so the native `run_skill_script`
   tool can execute the skill's own validation script through the
-  subprocess script runner defined here.
+  subprocess script runner defined here. `run_validation_gate` reuses that
+  same runner to execute the skill's `validate.py` **without an LLM** — Flow
+  2's deterministic gate.
 - **Prompts** (`src/foundry_agent/prompts.py`) — every instruction block,
   the pack manifests, and per-turn prompt clauses; skill identity
   constants (`FORMAT_SKILL_DIR`, `VALIDATION_SCRIPT_NAME`).
@@ -52,7 +66,8 @@ src/foundry_agent/
 ├── hosting.py                  # PRODUCTION entrypoint — WorkflowAgent + ResponsesHostServer (+ chat mode)
 ├── checkpoint_compat.py        # shim: lets hosted checkpoints restore this workflow's types
 ├── main.py                     # DevUI entrypoint (optional dev tooling)
-├── workflow.py                 # the pipeline: discovery → elicitation → validation → assembler
+├── workflow.py                 # Flow 1 (graph API): discovery → elicitation → validation → assembler
+├── workflow_functional.py      # Flow 2 (functional API): same flow + deterministic validate.py gate loop
 ├── chat_agent.py               # drives the workflow over chat turns; per-turn checkpoints + restart resume
 ├── agents.py                   # 4 agents, skill packs + skill mounts, client factory, script runner
 ├── prompts.py                  # everything the agents are told: instructions, packs, per-turn clauses

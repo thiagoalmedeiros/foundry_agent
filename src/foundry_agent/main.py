@@ -17,11 +17,13 @@ import os
 import socket
 from urllib.parse import urlparse
 
+from agent_framework import FunctionalWorkflowAgent
 from agent_framework.devui import serve
 from dotenv import load_dotenv
 
 from foundry_agent.chat_agent import WorkflowChatAgent
 from foundry_agent.workflow import DiscoveryCache, create_report_workflow
+from foundry_agent.workflow_functional import create_hybrid_workflow
 
 DEVUI_PORT = 8090
 
@@ -30,6 +32,13 @@ AGENT_DESCRIPTION = (
     "Document-authoring flow: discovery, one gap-analysis pass, an agent-paced "
     "elicitation conversation confirming what was inferred and asking the rest, "
     "validation, then the assembled document."
+)
+
+HYBRID_AGENT_NAME = "report-interview-functional"
+HYBRID_AGENT_DESCRIPTION = (
+    "Flow 2 (functional API): the same discovery → elicitation → assembler flow, "
+    "but the validation stage is a deterministic skill-script gate that re-elicits "
+    "only the groups with missing fields until the script passes or a cycle cap is hit."
 )
 
 
@@ -45,6 +54,21 @@ def create_report_agent() -> WorkflowChatAgent:
         lambda: create_report_workflow(discovery_cache=cache),
         name=AGENT_NAME,
         description=AGENT_DESCRIPTION,
+    )
+
+
+def create_hybrid_agent() -> FunctionalWorkflowAgent:
+    """Wrap Flow 2 (the functional hybrid workflow) as the agent DevUI hosts.
+
+    ``FunctionalWorkflow.as_agent`` is the framework's native agent adapter for a
+    functional workflow — used here instead of :class:`WorkflowChatAgent`, which
+    is built for the graph workflow's checkpoint-based resume and is left
+    untouched. One workflow instance backs the agent, so this is the single-user
+    DevUI showcase surface; per-conversation isolation and hosted checkpoint
+    parity for Flow 2 are a deferred follow-up, not part of this switch.
+    """
+    return create_hybrid_workflow().as_agent(
+        name=HYBRID_AGENT_NAME, description=HYBRID_AGENT_DESCRIPTION
     )
 
 
@@ -100,8 +124,9 @@ def main() -> None:
     instead — DevUI detects it as a workflow (it has ``executors``) and renders
     its stage-graph plus a typed human-in-the-loop panel, which is the view for
     watching how the internal graph executes one executor at a time (discovery →
-    analysis → elicitation → validation → assembler). Both paths need the
-    AZURE_OPENAI_* variables.
+    analysis → elicitation → validation → assembler). Pass ``--functional`` to
+    serve Flow 2 — the functional-API hybrid workflow with a deterministic script
+    gate — as an agent instead. All paths need the AZURE_OPENAI_* variables.
     """
     # Uvicorn only configures its own loggers; without this the package's INFO
     # records — including the per-stage token usage lines the cost work relies
@@ -129,8 +154,19 @@ def main() -> None:
         help="Serve the raw Workflow (DevUI stage-graph + typed HITL panel) instead "
         "of the chat agent, to inspect how the internal graph executes.",
     )
+    parser.add_argument(
+        "--functional",
+        action="store_true",
+        help="Serve Flow 2, the functional-API hybrid workflow (deterministic "
+        "script gate), as an agent instead of the default graph workflow.",
+    )
     args = parser.parse_args()
-    entity = create_report_workflow() if args.workflow else create_report_agent()
+    if args.functional:
+        entity = create_hybrid_agent()
+    elif args.workflow:
+        entity = create_report_workflow()
+    else:
+        entity = create_report_agent()
     # auth_enabled=False: DevUI's default dev-token auth 401s the auto-opened
     # browser (it never receives the token); the server binds to 127.0.0.1 only.
     serve(

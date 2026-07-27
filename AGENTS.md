@@ -14,7 +14,7 @@ All entry points are go-task targets ([Taskfile.yml](Taskfile.yml)):
 | `task lint` | `ruff check src/ tests/ main.py` |
 | `task hosted:run` | Production serving path on :8088 (real model calls; needs `AZURE_OPENAI_*`) |
 | `task hosted:invoke` | POST one `/responses` turn to a running server (`MESSAGE="..."`) |
-| `task devui` | DevUI dev tooling on :8090 (not the production path) |
+| `task devui` | DevUI dev tooling on :8090 (not the production path); Flow 2 (functional) via `python -m foundry_agent.main --functional` |
 | `task sim:up` / `sim:down` / `sim:smoke` | Local deploy-sim stack: OTel collector (:4318) + Aspire dashboard (:18888) |
 | `task sim:run` | Serve the agent against the sim stack (chat mode, traces → Aspire) |
 | `task otel:up` / `otel:down` | Dev-only sqlite OTLP collector; defers if :4318 is already owned |
@@ -67,3 +67,10 @@ test that needs live credentials.
   already running" and the error path resets the conversation including
   its durable checkpoints — known follow-up: treat as "still busy"
   without the reset.
+- In the Flow 2 functional workflow (`workflow_functional.py`), a resume
+  **replaces** the response map rather than accumulating it, so every
+  `request_info` must live inside the `@step` that consumes its reply — a
+  resolved pause is then cached and short-circuited on replay-from-top, and
+  a resume only needs the newest answer. `request_info` in the workflow body
+  re-suspends on the first pause during the second resume. Gate the loop with
+  `FLOW2_MAX_CYCLES` (default 40) so an unresolvable field cannot hang it.
