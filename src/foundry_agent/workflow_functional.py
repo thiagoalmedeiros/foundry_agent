@@ -143,6 +143,32 @@ def _cap_input(text: str, *, where: str) -> str:
     return f"{text[:MAX_USER_INPUT_CHARS]}\n\n[input truncated: {dropped} characters omitted]"
 
 
+def _as_text(message: object) -> str:
+    """Flatten the workflow's input to plain text.
+
+    ``.run()`` accepts a plain string (the path the tests drive), but the
+    :class:`~agent_framework.FunctionalWorkflowAgent` adapter that DevUI and any
+    agent host use forwards the turn as a :class:`~agent_framework.Message` — or
+    a list of them — so the workflow must accept both shapes. This mirrors Flow
+    1's ``start_from_messages``: join the text of each message, ignoring empties.
+
+    Args:
+        message: The run input — a string, a message-like object exposing
+            ``.text``, or a sequence of those.
+
+    Returns:
+        The concatenated text, or an empty string when there is none.
+    """
+    if message is None:
+        return ""
+    if isinstance(message, str):
+        return message
+    if isinstance(message, (list, tuple)):
+        return "\n\n".join(part for part in (_as_text(item) for item in message) if part)
+    text = getattr(message, "text", None)
+    return text if isinstance(text, str) else str(message)
+
+
 def _render_content(base_content: str, captured: dict[str, str]) -> str:
     """Render the interview content from the base input and the authoritative map.
 
@@ -321,14 +347,16 @@ def build_hybrid_workflow(
         ]
 
     @workflow(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
-    async def hybrid_report_workflow(message: str) -> str:
+    async def hybrid_report_workflow(message: object) -> str:
         """Walk every group, gate on the skill's script, re-elicit until it passes.
 
-        No ``ctx`` parameter is needed here: the human-in-the-loop pauses live
-        inside :func:`ask_continue_step`, which reaches the active context through
-        :func:`get_run_context`.
+        ``message`` may be a plain string or the ``Message`` / list-of-messages an
+        agent host (DevUI via ``.as_agent()``) forwards — :func:`_as_text`
+        normalizes both. No ``ctx`` parameter is needed here: the human-in-the-loop
+        pauses live inside :func:`ask_continue_step`, which reaches the active
+        context through :func:`get_run_context`.
         """
-        base_content = _cap_input(message, where="initial input")
+        base_content = _cap_input(_as_text(message), where="initial input")
         groups = (await discovery_step()).groups
         # The authoritative {attribute_id: value} map — the deterministic gate's
         # input, and what the content is rendered from (never parsed back out of it).

@@ -24,7 +24,10 @@ System design and structure. Working instructions live in
   residual gaps bank into the same advisory appendix. Each `request_info`
   lives inside a `@step` so the functional API's replay-from-top resume
   short-circuits resolved pauses. Flow 1 stays the production/hosted default;
-  Flow 2 is exposed for the DevUI showcase (`main.py --functional`).
+  Flow 2 is served for the DevUI showcase (`main.py --functional`) through
+  `FunctionalWorkflowChatAgent` (`chat_agent_functional.py`), which renders each
+  pause as assistant text and holds one workflow per conversation in memory (no
+  checkpoint storage).
 - **Agents** (`src/foundry_agent/agents.py`) — four agents (discovery,
   elicitation, validation, authoring) over one chat client factory.
   Discovery and elicitation use MAF progressive disclosure
@@ -69,6 +72,7 @@ src/foundry_agent/
 ├── workflow.py                 # Flow 1 (graph API): discovery → elicitation → validation → assembler
 ├── workflow_functional.py      # Flow 2 (functional API): same flow + deterministic validate.py gate loop
 ├── chat_agent.py               # drives the workflow over chat turns; per-turn checkpoints + restart resume
+├── chat_agent_functional.py    # serves Flow 2 as a DevUI chat (pauses as text); in-memory, no checkpoints
 ├── agents.py                   # 4 agents, skill packs + skill mounts, client factory, script runner
 ├── prompts.py                  # everything the agents are told: instructions, packs, per-turn clauses
 ├── usage.py                    # per-stage token accounting + OTel span annotation

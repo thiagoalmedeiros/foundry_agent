@@ -39,3 +39,9 @@ Each lesson follows this structure:
 **Mistake:** `WorkflowChatAgent` is typed for the graph `Workflow` and built around its checkpoint-based resume — the wrong wrapper for a `FunctionalWorkflow` (top-replay + in-memory step cache), and adapting it would mean editing `chat_agent.py`, which the plan's Out of Scope forbids.
 **Rule:** Expose a `FunctionalWorkflow` through its native `.as_agent()` → `FunctionalWorkflowAgent`, which DevUI's `serve(entities=[...])` accepts. One workflow instance backs that agent, so per-conversation isolation / hosted checkpoint parity is a separate (deferred) concern — don't hack it into the graph chat wrapper.
 **Applies to:** `src/foundry_agent/main.py::create_hybrid_agent`
+
+### [2026-07-27] — Flow 2 must accept Message input, not just str (agent-adapter path)
+**Context:** Chatting with Flow 2 in DevUI ("hi") raised `object of type 'Message' has no len()`, even though every offline test passed.
+**Mistake:** The `@workflow` function annotated its input `message: str` and called `len()` on it via `_cap_input`. Tests only ever drove `wf.run("hi")` with a plain string, but the `FunctionalWorkflowAgent` adapter (DevUI / `.as_agent()`) forwards the turn as a `Message` (or `list[Message]`), so `len(Message)` crashed. Batch 3 tested that the agent *constructs*, never that it *runs a turn*.
+**Rule:** Any workflow served through `.as_agent()` / an agent host must normalize its input to text (accept `str | Message | list[Message]`) — mirror Flow 1's `start_from_messages`. Always cover the agent-adapter *run* path in tests (drive a `Message` turn), not just `wf.run(str)`; "constructs offline" is not "runs".
+**Applies to:** `src/foundry_agent/workflow_functional.py` (`_as_text`), `tests/test_workflow_functional.py`

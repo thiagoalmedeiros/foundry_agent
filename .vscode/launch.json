@@ -57,6 +57,31 @@
             }
         },
         {
+            // Run and Debug → DevUI serving FLOW 2 (--functional): the MAF
+            // functional-API hybrid workflow, wrapped as an agent via
+            // .as_agent() and served on :8090 (browser auto-opens). Its
+            // validation stage is a deterministic validate.py script gate (no
+            // LLM) that re-elicits only the groups with missing fields until the
+            // script passes or FLOW2_MAX_CYCLES (default 40) is hit. justMyCode
+            // is false so breakpoints land inside workflow_functional.py — the
+            // @step boundaries, the request_info pauses, and the gate loop.
+            // Needs AZURE_OPENAI_* (loaded from .env); start `task sim:up`
+            // (Aspire at :18888) or the AI Toolkit tracing view first so :4318
+            // is listening. Set FLOW2_MAX_CYCLES here to demo the cap sooner.
+            "name": "DevUI Flow 2 functional workflow (:8090, --functional, OTel → :4318)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "foundry_agent.main",
+            "args": ["--functional"],
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+                "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"
+            }
+        },
+        {
             "name": "Hosted agent + Foundry Toolkit visualizer (OTLP :4319)",
             "type": "debugpy",
             "request": "launch",

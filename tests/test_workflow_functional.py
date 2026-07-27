@@ -191,6 +191,44 @@ async def test_validation_gate_passes_when_required_attributes_present_and_valid
     assert failing == []
 
 
+async def test_hybrid_accepts_a_message_input(make_stub_client, make_elicitation_client):
+    """DevUI forwards the turn as a Message, not a str — the workflow must accept it."""
+    from agent_framework import Message
+
+    workflow = _hybrid(
+        make_stub_client, make_elicitation_client, turns=(_FG1_CLOSE, _FG2_CLOSE)
+    )
+    # A bare Message is the exact shape the FunctionalWorkflowAgent adapter sends;
+    # before the _as_text fix this raised "object of type 'Message' has no len()".
+    result = await workflow.run(Message(role="user", contents=["hi"]))
+    assert result.get_outputs()[0].startswith("# Report")
+
+
+async def test_hybrid_accepts_a_list_of_messages(make_stub_client, make_elicitation_client):
+    """A multi-message turn is flattened to text, not len()'d as a sequence of objects."""
+    from agent_framework import Message
+
+    workflow = _hybrid(
+        make_stub_client, make_elicitation_client, turns=(_FG1_CLOSE, _FG2_CLOSE)
+    )
+    result = await workflow.run([Message(role="user", contents=["hello"])])
+    assert result.get_outputs()[0].startswith("# Report")
+
+
+async def test_hybrid_agent_adapter_runs_a_message_turn(
+    make_stub_client, make_elicitation_client
+):
+    """The full DevUI path: .as_agent().run(Message) completes a turn end-to-end."""
+    from agent_framework import Message
+
+    workflow = _hybrid(
+        make_stub_client, make_elicitation_client, turns=(_FG1_CLOSE, _FG2_CLOSE)
+    )
+    agent = workflow.as_agent(name="report-interview-functional")
+    response = await agent.run(Message(role="user", contents=["hi"]))
+    assert "# Report" in (response.text or "")
+
+
 _FLOW1_ENV = {
     "AZURE_OPENAI_ENDPOINT": "https://example.openai.azure.com/",
     "AZURE_OPENAI_DEPLOYMENT": "gpt-test",

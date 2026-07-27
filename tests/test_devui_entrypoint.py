@@ -41,8 +41,8 @@ def test_devui_entrypoint_serves_the_workflow_as_a_chat_agent(monkeypatch):
     assert main.DEVUI_PORT == 8090
 
 
-def test_devui_entrypoint_serves_flow2_as_a_functional_agent(monkeypatch):
-    """The --functional switch builds Flow 2 as a functional-workflow agent, offline."""
+def test_devui_entrypoint_serves_flow2_as_a_chat_agent(monkeypatch):
+    """The --functional switch builds Flow 2 as a chat agent (no approval panel), offline."""
     for key, value in _FAKE_ENV.items():
         monkeypatch.setenv(key, value)
 
@@ -51,7 +51,7 @@ def test_devui_entrypoint_serves_flow2_as_a_functional_agent(monkeypatch):
     agent = main.create_hybrid_agent()
 
     assert agent.name == "report-interview-functional"
-    assert type(agent).__name__ == "FunctionalWorkflowAgent"
+    assert type(agent).__name__ == "FunctionalWorkflowChatAgent"
     # The default (no-flag) entrypoint is unchanged — still the Flow 1 chat agent.
     assert main.create_report_agent().name == "report-interview-agent"
 
