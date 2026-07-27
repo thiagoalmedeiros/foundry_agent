@@ -41,6 +41,21 @@ def test_devui_entrypoint_serves_the_workflow_as_a_chat_agent(monkeypatch):
     assert main.DEVUI_PORT == 8090
 
 
+def test_devui_entrypoint_serves_flow2_as_a_functional_agent(monkeypatch):
+    """The --functional switch builds Flow 2 as a functional-workflow agent, offline."""
+    for key, value in _FAKE_ENV.items():
+        monkeypatch.setenv(key, value)
+
+    from foundry_agent import main
+
+    agent = main.create_hybrid_agent()
+
+    assert agent.name == "report-interview-functional"
+    assert type(agent).__name__ == "FunctionalWorkflowAgent"
+    # The default (no-flag) entrypoint is unchanged — still the Flow 1 chat agent.
+    assert main.create_report_agent().name == "report-interview-agent"
+
+
 def test_devui_entrypoint_binds_one_shared_discovery_cache(monkeypatch):
     """DevUI rebuilds the workflow per conversation, so it binds one cache above
     the factory — the discovery memo must span conversations, not reset each one."""

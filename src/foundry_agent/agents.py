@@ -31,6 +31,7 @@ import json
 import logging
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -154,6 +155,61 @@ async def _run_python_skill_script(
         return json.loads(output)
     except json.JSONDecodeError:
         return output
+
+
+@dataclass(frozen=True)
+class _ScriptRef:
+    """The minimal script view :func:`_run_python_skill_script` reads.
+
+    That runner touches only ``full_path`` and ``name`` (never its ``skill``
+    argument), so a deterministic caller can drive it without building the
+    framework's ``FileSkill`` graph — which would require an agent-backed
+    ``SkillsSourceContext`` this no-LLM gate deliberately avoids.
+    """
+
+    full_path: str
+    name: str
+
+
+async def run_validation_gate(
+    captured_values: dict[str, str], groups: list[FieldGroup]
+) -> list[str]:
+    """Run the format skill's validation script as a deterministic gate — no LLM.
+
+    Flow 2's validation stage: it executes the mounted skill's own
+    ``validation/validate.py`` through the same subprocess runner and security
+    stance as the agent path (:func:`_run_python_skill_script`), passing this
+    run's captured values and group scope, and returns the attribute ids the
+    script reports failing. An empty list means the document passes the skill's
+    deterministic rules. The rules themselves live in the skill, never here.
+
+    Args:
+        captured_values: ``{attribute_id: value}`` the interview has settled.
+        groups: The in-scope field groups — the attribute universe to judge.
+
+    Returns:
+        The failing attribute ids, exactly as the script reported them.
+
+    Raises:
+        RuntimeError: The script did not return a JSON array of ids — a runner
+            error string or malformed output is surfaced loudly rather than
+            being mistaken for "nothing failing".
+    """
+    script = _ScriptRef(
+        full_path=str(FORMAT_SKILL_DIR / VALIDATION_SCRIPT_NAME),
+        name=VALIDATION_SCRIPT_NAME,
+    )
+    group_dicts = [group.model_dump() for group in groups]
+    # _run_python_skill_script ignores its first (skill) argument, so the same
+    # ref stands in for it; only full_path / name are read.
+    result = await _run_python_skill_script(
+        script, script, [json.dumps(captured_values), json.dumps(group_dicts)]
+    )
+    if not isinstance(result, list) or not all(isinstance(item, str) for item in result):
+        raise RuntimeError(
+            f"validation gate did not return a JSON array of attribute ids: {result!r}"
+        )
+    return result
 
 
 def create_skills(paths: list[Path]) -> SkillsProvider:
