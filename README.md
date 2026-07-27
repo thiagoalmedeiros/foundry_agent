@@ -21,11 +21,14 @@ skill declares:
 > the agent's adequacy judgment) → the Assembler, which emits a complete
 > Police Incident Report per the skill's canonical template.
 
-This is the MAF **workflow-build** (graph API) sibling of this template.
-A **sequential-orchestration** sibling — deterministic discovery and
-code-based validation, better suited to a template that wants to
-demonstrate replacing agent steps with plain Python — is planned
-separately and not part of this codebase yet.
+This is **Flow 1**, written on the MAF **graph API** (executors + edges). A
+**functional-API** sibling, **Flow 2**, now ships alongside it: the same
+discovery → elicitation → assembler flow written as a plain `async @workflow`,
+but its validation stage is a **deterministic script gate** — the skill's own
+`validate.py` run directly, with no LLM — that re-elicits only the groups with
+missing fields until the script passes or a cycle cap is hit. See
+[Two flows: graph API vs functional API](#two-flows-graph-api-vs-functional-api)
+below.
 
 ## How the domain is defined
 
@@ -101,6 +104,8 @@ Two entrypoints, deliberately distinct:
 - **Dev tooling only — DevUI** ([`main.py`](src/foundry_agent/main.py),
   `task devui`): an optional local inspector for driving the workflow
   interactively. Not the production path; nothing production depends on it.
+  Run `python -m foundry_agent.main --functional` to serve **Flow 2** (the
+  functional hybrid workflow) instead of the default graph workflow.
 
 ## Layout
 
@@ -114,7 +119,8 @@ src/foundry_agent/
 ├── hosting.py                  # PRODUCTION entrypoint — WorkflowAgent + ResponsesHostServer (+ chat mode)
 ├── checkpoint_compat.py        # shim: lets hosted checkpoints restore this workflow's types
 ├── main.py                     # DevUI entrypoint (optional dev tooling)
-├── workflow.py                 # the pipeline: discovery → elicitation → validation → assembler
+├── workflow.py                 # Flow 1 (graph API): discovery → elicitation → validation → assembler
+├── workflow_functional.py      # Flow 2 (functional API): same flow + deterministic validate.py gate loop
 ├── chat_agent.py               # drives the workflow over chat turns; per-turn checkpoints + restart resume
 ├── agents.py                   # 4 agents, skill packs + skill mounts, client factory, script runner
 ├── prompts.py                  # everything the agents are told: instructions, packs, per-turn clauses
@@ -221,14 +227,25 @@ The workflow (`workflow.py`) and the agent wiring (`agents.py`, including
 its domain-neutral skill-script runner) need **no changes** for a domain
 fork — only the skill content and the prompt vocabulary do.
 
-## Architecture note: graph API vs functional API
+## Two flows: graph API vs functional API
 
-The predecessor project implemented an earlier per-group version of this
-loop on both MAF orchestration surfaces and recorded the comparison.
-Short version: the functional API (`@workflow` + a `while` loop) expresses
-a termination policy far more readably, but its HITL resume semantics
-(replay-from-top, caller re-supplies all prior answers) had no DevUI
-serving path — so this template uses the graph API (executors + edges),
-which checkpoints and resumes cleanly through both DevUI and the hosted
-`/responses` protocol. Re-evaluate if the functional API's serving story
-matures.
+This template ships **both** MAF orchestration surfaces so you can compare
+them directly:
+
+- **Flow 1 — graph API** ([`workflow.py`](src/foundry_agent/workflow.py), the
+  default). Executors + edges; validation is an LLM agent (the skill's
+  `validate.py` via `run_skill_script`, plus an adequacy judgment) run once
+  after the last group closes. It checkpoints and resumes cleanly through both
+  DevUI and the hosted `/responses` protocol — the production path.
+- **Flow 2 — functional API**
+  ([`workflow_functional.py`](src/foundry_agent/workflow_functional.py),
+  `python -m foundry_agent.main --functional`). A plain `async @workflow` with
+  `@step` calls; its validation stage is a **deterministic script gate** — no
+  LLM — that re-elicits only the groups with missing fields until `validate.py`
+  passes or a cycle cap (`FLOW2_MAX_CYCLES`, default 40) banks the residual gaps
+  into the appendix. The functional API expresses that termination loop far more
+  readably, at the cost of HITL resume semantics that replay from the top of the
+  run — so each `request_info` lives inside a `@step`, letting a resolved pause
+  be cached and short-circuited on replay. Flow 2 is exposed for the local DevUI
+  showcase via `.as_agent()`; hosted serving and per-conversation isolation for
+  it are a deferred follow-up, so Flow 1 stays the production default.
