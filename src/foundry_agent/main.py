@@ -17,11 +17,11 @@ import os
 import socket
 from urllib.parse import urlparse
 
-from agent_framework import FunctionalWorkflowAgent
 from agent_framework.devui import serve
 from dotenv import load_dotenv
 
 from foundry_agent.chat_agent import WorkflowChatAgent
+from foundry_agent.chat_agent_functional import FunctionalWorkflowChatAgent
 from foundry_agent.workflow import DiscoveryCache, create_report_workflow
 from foundry_agent.workflow_functional import create_hybrid_workflow
 
@@ -57,18 +57,23 @@ def create_report_agent() -> WorkflowChatAgent:
     )
 
 
-def create_hybrid_agent() -> FunctionalWorkflowAgent:
-    """Wrap Flow 2 (the functional hybrid workflow) as the agent DevUI hosts.
+def create_hybrid_agent() -> FunctionalWorkflowChatAgent:
+    """Wrap Flow 2 (the functional hybrid workflow) as the chat agent DevUI hosts.
 
-    ``FunctionalWorkflow.as_agent`` is the framework's native agent adapter for a
-    functional workflow — used here instead of :class:`WorkflowChatAgent`, which
-    is built for the graph workflow's checkpoint-based resume and is left
-    untouched. One workflow instance backs the agent, so this is the single-user
-    DevUI showcase surface; per-conversation isolation and hosted checkpoint
-    parity for Flow 2 are a deferred follow-up, not part of this switch.
+    Uses :class:`FunctionalWorkflowChatAgent` rather than the raw
+    ``FunctionalWorkflow.as_agent()`` so each elicitation pause reads as ordinary
+    assistant text — a normal DevUI chat — instead of a per-turn "Approval
+    Required" panel (which is how DevUI renders a bare functional workflow's
+    ``request_info``). A shared :class:`DiscoveryCache` is bound above the
+    factory, which the wrapper calls once per conversation, so the discovery memo
+    spans conversations. In-memory only: a process restart drops in-flight Flow 2
+    conversations (hosted/checkpoint parity is a separate follow-up).
     """
-    return create_hybrid_workflow().as_agent(
-        name=HYBRID_AGENT_NAME, description=HYBRID_AGENT_DESCRIPTION
+    cache = DiscoveryCache()
+    return FunctionalWorkflowChatAgent(
+        lambda: create_hybrid_workflow(discovery_cache=cache),
+        name=HYBRID_AGENT_NAME,
+        description=HYBRID_AGENT_DESCRIPTION,
     )
 
 
