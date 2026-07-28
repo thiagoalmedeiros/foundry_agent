@@ -40,6 +40,16 @@ persistent per-session containers hosted; the plain filesystem locally).
 Still assumed out of scope: clients that send no conversation id share the
 ``"default"`` conversation.
 
+**Flow 2 chat mode** (``HOSTED_AGENT_MODE=chat-functional``): serves the
+functional workflow (Flow 2) as a chat agent via
+:class:`~foundry_agent.chat_agent_functional.FunctionalWorkflowChatAgent` — the
+same plain-text-pause behavior as chat mode, but Flow 2's deterministic
+``validate.py`` gate stands in for the validation agent. It is **in-memory
+only**: a restart drops in-flight Flow 2 interviews, so the restart-resume
+guarantee above is Flow 1 chat mode's alone. This is the surface the local
+Agents Playground / Teams bridge drives when testing Flow 2 (see
+``HOSTED_AGENT_MODE`` in ARCHITECTURE.md).
+
 **Observability** is a third thing the hosting infrastructure owns: building
 a :class:`~agent_framework_foundry_hosting.ResponsesHostServer` unconditionally
 triggers ``azure.ai.agentserver``'s bundled OTel distro, which is the sole
@@ -63,8 +73,10 @@ from agent_framework_foundry_hosting import ResponsesHostServer
 from dotenv import load_dotenv
 
 from foundry_agent.chat_agent import WorkflowChatAgent
+from foundry_agent.chat_agent_functional import FunctionalWorkflowChatAgent
 from foundry_agent.checkpoint_compat import install_checkpoint_type_allowlist
 from foundry_agent.workflow import DiscoveryCache, create_report_workflow
+from foundry_agent.workflow_functional import create_hybrid_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +85,15 @@ AGENT_DESCRIPTION = (
     "Document-authoring interview: one gap-analysis pass over every field group, one "
     "agent-paced elicitation conversation, and validation via the mounted format "
     "skill's own script plus adequacy judgment, then the assembled document."
+)
+#: Flow 2's description for chat-functional mode. Flow 2 differs from Flow 1 only
+#: in its validation stage (a deterministic skill-script gate, not an agent), so
+#: the served name stays :data:`AGENT_NAME` — the Teams bridge sends one model
+#: string regardless of which flow the server runs.
+FUNCTIONAL_AGENT_DESCRIPTION = (
+    "Document-authoring interview (Flow 2, functional API): the same discovery → "
+    "elicitation → assembler flow, but validation is a deterministic skill-script gate "
+    "that re-elicits only the groups with missing fields until it passes."
 )
 #: Local port for `azd ai agent run`; the hosted platform overrides it.
 DEFAULT_PORT = 8088
@@ -116,6 +137,64 @@ def create_hosted_chat_agent() -> WorkflowChatAgent:
         name=AGENT_NAME,
         description=AGENT_DESCRIPTION,
     )
+
+
+def create_hosted_functional_chat_agent() -> FunctionalWorkflowChatAgent:
+    """Wrap Flow 2 (the functional workflow) as a plain-text chat agent.
+
+    The Flow 2 sibling of :func:`create_hosted_chat_agent`: chat-first clients (the
+    Foundry playground, a Teams bridge over the Agents Playground) render assistant
+    *text* only, so Flow 2's ``request_info`` pauses are served as ordinary
+    assistant text by :class:`FunctionalWorkflowChatAgent`. Like the Flow 1 chat
+    wrapper it takes the workflow *factory* — a fresh workflow per conversation —
+    so one shared :class:`DiscoveryCache` is bound here, above the factory, to keep
+    the discovery memo spanning conversations.
+
+    Unlike Flow 1 chat mode this holds each conversation **in memory only**: a
+    process restart drops in-flight Flow 2 interviews (Flow 2's checkpoint types
+    are outside the chat checkpoint allowlist — see
+    :mod:`~foundry_agent.chat_agent_functional`), so restart-resume stays a
+    Flow 1 chat-mode guarantee, and hosted checkpoint parity is a separate
+    follow-up.
+    """
+    cache = DiscoveryCache()
+    return FunctionalWorkflowChatAgent(
+        lambda: create_hybrid_workflow(discovery_cache=cache),
+        name=AGENT_NAME,
+        description=FUNCTIONAL_AGENT_DESCRIPTION,
+    )
+
+
+def _create_agent_for_mode(
+    mode: str,
+) -> WorkflowAgent | WorkflowChatAgent | FunctionalWorkflowChatAgent:
+    """Select the served agent for a ``HOSTED_AGENT_MODE`` value.
+
+    The mode string is normalized here (stripped, lower-cased) so callers may
+    pass the raw environment value. Three surfaces over the one workflow:
+
+    - ``chat`` — Flow 1 as a plain-text chat agent (per-turn file checkpoints,
+      restart resume).
+    - ``chat-functional`` — Flow 2 as a plain-text chat agent (in-memory only).
+    - anything else (default ``workflow``) — Flow 1 as MAF's
+      :class:`WorkflowAgent` for machine clients, with human-in-the-loop as a
+      ``request_info`` function call.
+    """
+    normalized = mode.strip().lower()
+    if normalized == "chat":
+        return create_hosted_chat_agent()
+    if normalized == "chat-functional":
+        return create_hosted_functional_chat_agent()
+    if normalized not in ("", "workflow"):
+        # Falling through to workflow mode silently would serve machine-client
+        # `request_info` function calls to a chat client, which renders as empty
+        # replies — a typo like "chat-func" must not look like it worked.
+        logger.warning(
+            "unrecognized HOSTED_AGENT_MODE %r — serving the default workflow mode "
+            "(expected 'workflow', 'chat', or 'chat-functional')",
+            mode,
+        )
+    return create_hosted_agent()
 
 
 def _configure_local_otel_defaults() -> None:
@@ -168,14 +247,17 @@ def main() -> None:
     # once agent-framework-foundry-hosting exposes an allowlist hook.
     install_checkpoint_type_allowlist()
     port = int(os.environ.get("PORT", DEFAULT_PORT))
-    mode = os.environ.get("HOSTED_AGENT_MODE", "workflow").strip().lower()
-    agent = create_hosted_chat_agent() if mode == "chat" else create_hosted_agent()
+    # _create_agent_for_mode owns normalization, so the raw value is passed through.
+    mode = os.environ.get("HOSTED_AGENT_MODE", "workflow")
+    agent = _create_agent_for_mode(mode)
     server = ResponsesHostServer(agent)
+    # Log the served agent's type, not the requested mode string: an unrecognized
+    # mode falls back to workflow mode, and echoing the request would misreport that.
     logger.info(
-        "serving %s on port %d via the Foundry Responses protocol (%s mode)",
+        "serving %s on port %d via the Foundry Responses protocol (%s)",
         AGENT_NAME,
         port,
-        mode,
+        type(agent).__name__,
     )
     server.run(port=port)
 

@@ -1,12 +1,23 @@
 {
-    // F5 target for the Microsoft Foundry Toolkit's hosted-agent flow: starts
-    // the /responses server on :8088 with debugging; the toolkit's Agent
-    // Inspector attaches to it for interactive testing. Root main.py loads
-    // hosted.env (HOSTED_AGENT_MODE=chat), so Inspector turns render as text.
+    // Run and Debug shows exactly TWO entries — one per workflow — each starting
+    // the full Teams loop (workflow server + bridge + Agents Playground UI):
+    //
+    //   Flow 1 — Teams Playground   graph API, validation agent
+    //   Flow 2 — Teams Playground   functional API, deterministic validate.py gate
+    //
+    // Every other configuration below is still here and still runnable; it is
+    // only marked `"presentation": { "hidden": true }` so it stays out of the
+    // list. To bring one back (DevUI, the raw workflow graph, the Foundry
+    // Toolkit visualizer), delete its `presentation` line. The compounds at the
+    // bottom reference the hidden Teams entries by name — those four must keep
+    // their names, but hiding them does not affect the compounds.
     "version": "0.2.0",
     "configurations": [
         {
             "name": "Hosted agent (Foundry Responses protocol, :8088)",
+            // Hidden from the Run and Debug list to keep it to the two
+            // Teams compounds; still fully runnable (unhide by removing this).
+            "presentation": { "hidden": true },
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
@@ -21,6 +32,9 @@
             // (Aspire at :18888) or the AI Toolkit tracing view first so the
             // collector on :4318 is listening.
             "name": "DevUI (:8090, browser auto-opens, OTel → :4318)",
+            // Hidden from the Run and Debug list to keep it to the two
+            // Teams compounds; still fully runnable (unhide by removing this).
+            "presentation": { "hidden": true },
             "type": "debugpy",
             "request": "launch",
             "module": "foundry_agent.main",
@@ -44,6 +58,9 @@
             // AZURE_OPENAI_* (loaded from .env); start `task sim:up` (Aspire at
             // :18888) or the AI Toolkit tracing view first so :4318 is listening.
             "name": "DevUI workflow graph (:8090, raw Workflow, OTel → :4318)",
+            // Hidden from the Run and Debug list to keep it to the two
+            // Teams compounds; still fully runnable (unhide by removing this).
+            "presentation": { "hidden": true },
             "type": "debugpy",
             "request": "launch",
             "module": "foundry_agent.main",
@@ -69,6 +86,9 @@
             // (Aspire at :18888) or the AI Toolkit tracing view first so :4318
             // is listening. Set FLOW2_MAX_CYCLES here to demo the cap sooner.
             "name": "DevUI Flow 2 functional workflow (:8090, --functional, OTel → :4318)",
+            // Hidden from the Run and Debug list to keep it to the two
+            // Teams compounds; still fully runnable (unhide by removing this).
+            "presentation": { "hidden": true },
             "type": "debugpy",
             "request": "launch",
             "module": "foundry_agent.main",
@@ -83,6 +103,9 @@
         },
         {
             "name": "Hosted agent + Foundry Toolkit visualizer (OTLP :4319)",
+            // Hidden from the Run and Debug list to keep it to the two
+            // Teams compounds; still fully runnable (unhide by removing this).
+            "presentation": { "hidden": true },
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
@@ -96,6 +119,112 @@
                 // env-only selection mechanism production uses.
                 "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4319"
             }
+        },
+        // ------------------------------------------------------------------ //
+        // Teams bridge. Driving the workflow from the Agents Playground needs
+        // THREE processes; use the compounds at the bottom to start all of them
+        // with one F5, or launch these individually.
+        // ------------------------------------------------------------------ //
+        {
+            // The chat-mode /responses server the bridge forwards to — FLOW 1
+            // (graph API + validation agent). Runs `foundry_agent.hosting`
+            // directly (like `task hosted:run`) rather than root main.py, so
+            // hosted.env is not involved and the mode below is unambiguous.
+            // Needs AZURE_OPENAI_* from .env.
+            "name": "Teams · workflow server, Flow 1 (:8088, chat)",
+            // Hidden from the Run and Debug list to keep it to the two
+            // Teams compounds; still fully runnable (unhide by removing this).
+            "presentation": { "hidden": true },
+            "type": "debugpy",
+            "request": "launch",
+            "module": "foundry_agent.hosting",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "HOSTED_AGENT_MODE": "chat",
+                "PORT": "8088"
+            }
+        },
+        {
+            // Same server, FLOW 2 (functional API + deterministic validate.py
+            // gate). The bridge is flow-agnostic — the flow is chosen HERE, not
+            // in the bridge. In-memory only: a restart drops in-flight Flow 2
+            // interviews. Set FLOW2_MAX_CYCLES to demo the cycle cap sooner.
+            "name": "Teams · workflow server, Flow 2 (:8088, chat-functional)",
+            // Hidden from the Run and Debug list to keep it to the two
+            // Teams compounds; still fully runnable (unhide by removing this).
+            "presentation": { "hidden": true },
+            "type": "debugpy",
+            "request": "launch",
+            "module": "foundry_agent.hosting",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "HOSTED_AGENT_MODE": "chat-functional",
+                "PORT": "8088"
+            }
+        },
+        {
+            // The bridge itself: serves /api/messages on :3978 (the Agents
+            // Playground's default bot endpoint, so no Playground config is
+            // needed) and forwards each message as one bare /responses turn.
+            // justMyCode is false so breakpoints land in handle_message_turn.
+            // Start one of the two workflow servers above first.
+            "name": "Teams · bridge (:3978, /api/messages)",
+            // Hidden from the Run and Debug list to keep it to the two
+            // Teams compounds; still fully runnable (unhide by removing this).
+            "presentation": { "hidden": true },
+            "type": "debugpy",
+            "request": "launch",
+            "module": "foundry_agent.teams_bridge",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            // The Microsoft 365 Agents Playground (the Teams-like chat UI),
+            // fetched on demand by npx — no install step, needs Node. It opens
+            // a browser on :56150 and posts activities to
+            // http://localhost:3978/api/messages by default, which is exactly
+            // where the bridge listens. Override the UI port with
+            // TEAMSAPPTESTER_PORT if 56150 is taken.
+            "name": "Teams · Agents Playground UI (:56150)",
+            // Hidden from the Run and Debug list to keep it to the two
+            // Teams compounds; still fully runnable (unhide by removing this).
+            "presentation": { "hidden": true },
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npx",
+            "runtimeArgs": ["-y", "@microsoft/m365agentsplayground"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        }
+    ],
+    "compounds": [
+        {
+            // ONE F5 for the whole Flow 1 loop: workflow server + bridge +
+            // Playground UI. The browser opens by itself; type an incident
+            // description and answer each question. Stopping the compound stops
+            // all three.
+            "name": "Flow 1 — Teams Playground",
+            "configurations": [
+                "Teams · workflow server, Flow 1 (:8088, chat)",
+                "Teams · bridge (:3978, /api/messages)",
+                "Teams · Agents Playground UI (:56150)"
+            ],
+            "stopAll": true
+        },
+        {
+            // Same, driving Flow 2 (deterministic script gate) instead.
+            "name": "Flow 2 — Teams Playground",
+            "configurations": [
+                "Teams · workflow server, Flow 2 (:8088, chat-functional)",
+                "Teams · bridge (:3978, /api/messages)",
+                "Teams · Agents Playground UI (:56150)"
+            ],
+            "stopAll": true
         }
     ]
 }

@@ -236,8 +236,14 @@ _FLOW1_ENV = {
 }
 
 
-def test_flow2_does_not_alter_flow1_or_the_hosted_path(monkeypatch):
-    """Flow 2's existence must not change Flow 1's graph or move it off the hosted path."""
+def test_flow2_is_additive_leaving_flow1_and_the_default_hosted_path_intact(monkeypatch):
+    """Flow 2 is additive: Flow 1's graph is unchanged and stays the *default* hosted agent.
+
+    Flow 2 is now reachable on the hosted path via the explicit
+    ``HOSTED_AGENT_MODE=chat-functional`` mode, so hosting.py deliberately imports
+    it — but that must not alter Flow 1's graph nor displace Flow 1 as the agent the
+    host serves when no chat mode is selected.
+    """
     for key, value in _FLOW1_ENV.items():
         monkeypatch.setenv(key, value)
 
@@ -248,17 +254,14 @@ def test_flow2_does_not_alter_flow1_or_the_hosted_path(monkeypatch):
     assert flow1.name == "report-interview-agent"
     assert {"discovery", "elicitation", "validation", "assembler"} <= set(flow1.executors)
 
-    # The hosted entrypoint source still wires Flow 1 only — Flow 2 is off the hosted path.
-    from pathlib import Path
+    # The hosted entrypoint now wires BOTH flows, but Flow 1 remains the default:
+    # an unset/unknown HOSTED_AGENT_MODE still serves Flow 1 as a WorkflowAgent.
+    from agent_framework import WorkflowAgent
 
-    import foundry_agent
+    from foundry_agent.hosting import _create_agent_for_mode
 
-    hosting_src = (Path(foundry_agent.__file__).resolve().parent / "hosting.py").read_text(
-        encoding="utf-8"
-    )
-    assert "create_report_workflow" in hosting_src
-    assert "create_hybrid_workflow" not in hosting_src
-    assert "workflow_functional" not in hosting_src
+    assert isinstance(_create_agent_for_mode("workflow"), WorkflowAgent)
+    assert isinstance(_create_agent_for_mode(""), WorkflowAgent)
 
 
 def test_flow2_workflow_code_is_domain_free():

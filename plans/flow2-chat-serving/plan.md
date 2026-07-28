@@ -126,11 +126,11 @@ Plus a manual DevUI check by the user: `python -m foundry_agent.main --functiona
 
 | #      | Item                                                                     | File/Area                 | Status |
 | ------ | ------------------------------------------------------------------------ | ------------------------- | ------ |
-| 1      | Run `task test` → `task lint` — all green                                | repo root                 | ⬜     |
-| 2      | Manual review: DoD criteria hold (Flow 1 untouched, no checkpoints, domain-free) | manual code review | ⬜     |
-| 3      | Runtime smoke: offline chat-drive shows pause-as-text → answer → document, no approval/checkpoint errors | `tests/…functional` | ⬜     |
-| DoD    | Full inline-DoD sign-off                                                 | `## Definition of Done`   | ⬜     |
-| Thomas | Full plan sign-off                                                       | `skill:thomas`            | ⛾      |
+| 1      | Run `task test` → `task lint` — all green                                | repo root                 | ✅     |
+| 2      | Manual review: DoD criteria hold (Flow 1 untouched, no checkpoints, domain-free) | manual code review | ✅     |
+| 3      | Runtime smoke: offline chat-drive shows pause-as-text → answer → document, no approval/checkpoint errors | `tests/…functional` | ✅     |
+| DoD    | Full inline-DoD sign-off                                                 | `## Definition of Done`   | ✅     |
+| Thomas | Full plan sign-off (via ship DoD gate: 149 passed + lint on merged main) | `skill:thomas`            | ✅     |
 
 **Verify:** `task test` → `task lint` → 0 failures; the chat-drive smoke shows a pause surfaced as assistant text and the next message completing the interview.
 **DoD Gate:** Validation subagent runs every `## Definition of Done` criterion, pass/fail each. Mandatory; not done until all pass.

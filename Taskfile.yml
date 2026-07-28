@@ -124,3 +124,12 @@ tasks:
         -H "Content-Type: application/json"
         -d "$(python3 -c 'import json, os; print(json.dumps({"model": "report-interview-agent", "input": os.environ["MESSAGE"]}))')"
 
+  teams:bridge:
+    desc: >-
+      Run the Teams bridge (/api/messages on :3978) so the local Microsoft 365 Agents
+      Playground can drive the workflow. Start a chat-mode server first — `task hosted:run`
+      with HOSTED_AGENT_MODE=chat (Flow 1) or chat-functional (Flow 2); the bridge is
+      flow-agnostic and forwards each Playground message to the hosted /responses endpoint.
+    cmds:
+      - uv run python -m foundry_agent.teams_bridge
+

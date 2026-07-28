@@ -14,6 +14,7 @@ All entry points are go-task targets ([Taskfile.yml](Taskfile.yml)):
 | `task lint` | `ruff check src/ tests/ main.py` |
 | `task hosted:run` | Production serving path on :8088 (real model calls; needs `AZURE_OPENAI_*`) |
 | `task hosted:invoke` | POST one `/responses` turn to a running server (`MESSAGE="..."`) |
+| `task teams:bridge` | Teams bridge on `/api/messages` (:3978) for the local Agents Playground; forwards each message to a running chat-mode `hosted:run` |
 | `task devui` | DevUI dev tooling on :8090 (not the production path); Flow 2 (functional) via `python -m foundry_agent.main --functional` |
 | `task sim:up` / `sim:down` / `sim:smoke` | Local deploy-sim stack: OTel collector (:4318) + Aspire dashboard (:18888) |
 | `task sim:run` | Serve the agent against the sim stack (chat mode, traces → Aspire) |

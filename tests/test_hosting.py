@@ -21,7 +21,14 @@ from foundry_agent.agents import (
     create_validation_agent,
 )
 from foundry_agent.chat_agent import WorkflowChatAgent
-from foundry_agent.hosting import AGENT_NAME, create_hosted_agent, create_hosted_chat_agent
+from foundry_agent.chat_agent_functional import FunctionalWorkflowChatAgent
+from foundry_agent.hosting import (
+    AGENT_NAME,
+    _create_agent_for_mode,
+    create_hosted_agent,
+    create_hosted_chat_agent,
+    create_hosted_functional_chat_agent,
+)
 from foundry_agent.workflow import build_report_workflow
 from tests.conftest import (
     CLOSING_TURN,
@@ -96,6 +103,60 @@ def test_the_host_accepts_the_chat_agent():
     server = ResponsesHostServer(create_hosted_chat_agent())
 
     assert any("/responses" in getattr(route, "path", "") for route in server.routes)
+
+
+def test_create_hosted_functional_chat_agent_wraps_the_factory_lazily():
+    """Flow 2 chat mode, like Flow 1 chat, builds the workflow per conversation —
+    so no AZURE_OPENAI_* env is needed to construct the agent itself."""
+    agent = create_hosted_functional_chat_agent()
+
+    assert isinstance(agent, FunctionalWorkflowChatAgent)
+    assert agent.name == AGENT_NAME
+
+
+def test_hosted_functional_chat_agent_binds_one_shared_discovery_cache(monkeypatch):
+    """Flow 2 chat mode rebuilds the functional workflow per conversation, so one
+    cache is bound above the factory — the discovery memo must span conversations."""
+    import foundry_agent.hosting as hosting
+
+    seen: list[object] = []
+
+    def _recording_factory(discovery_cache=None):
+        seen.append(discovery_cache)
+        return object()  # a stand-in workflow; the wrapper only stores the factory
+
+    monkeypatch.setattr(hosting, "create_hybrid_workflow", _recording_factory)
+
+    factory = create_hosted_functional_chat_agent()._workflow_factory
+    factory()
+    factory()
+
+    assert seen[0] is not None, "the factory must receive a DiscoveryCache, not None"
+    assert seen[0] is seen[1], "both conversations must share the same cache instance"
+
+
+def test_the_host_accepts_the_functional_chat_agent():
+    """Flow 2 chat mode is a drop-in on the same host: FunctionalWorkflowChatAgent
+    shares WorkflowChatAgent's run() shape, so construction must not raise either."""
+    server = ResponsesHostServer(create_hosted_functional_chat_agent())
+
+    assert any("/responses" in getattr(route, "path", "") for route in server.routes)
+
+
+def test_create_agent_for_mode_selects_the_served_agent(monkeypatch):
+    """HOSTED_AGENT_MODE picks the surface: chat-functional must serve Flow 2 without
+    disturbing the chat (Flow 1) or default workflow paths, and the value is normalized."""
+    assert isinstance(_create_agent_for_mode("chat"), WorkflowChatAgent)
+    assert isinstance(_create_agent_for_mode("chat-functional"), FunctionalWorkflowChatAgent)
+    assert isinstance(
+        _create_agent_for_mode("  CHAT-FUNCTIONAL  "), FunctionalWorkflowChatAgent
+    ), "the mode should be stripped and lower-cased before dispatch"
+
+    # The default/workflow path builds the workflow eagerly, which reads AZURE_OPENAI_*.
+    for key, value in _FAKE_ENV.items():
+        monkeypatch.setenv(key, value)
+    assert isinstance(_create_agent_for_mode("workflow"), WorkflowAgent)
+    assert isinstance(_create_agent_for_mode("anything-else"), WorkflowAgent)
 
 
 def test_the_workflow_carries_no_checkpointing_of_its_own(

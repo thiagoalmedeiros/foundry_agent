@@ -48,8 +48,23 @@ System design and structure. Working instructions live in
   `WorkflowAgent` + `ResponsesHostServer` (`/responses` protocol);
   `HOSTED_AGENT_MODE=chat` serves `WorkflowChatAgent`
   (`src/foundry_agent/chat_agent.py`) for chat-first clients, with
-  per-turn file checkpoints and restart resume. `checkpoint_compat.py` is
-  an interim shim widening the host's checkpoint-type allowlist.
+  per-turn file checkpoints and restart resume, and
+  `HOSTED_AGENT_MODE=chat-functional` serves Flow 2 as a chat agent
+  (`FunctionalWorkflowChatAgent`, in-memory — the surface the Teams bridge
+  drives to test Flow 2). `checkpoint_compat.py` is an interim shim widening
+  the host's checkpoint-type allowlist.
+- **Teams bridge** (`src/foundry_agent/teams_bridge.py`) — dev tooling: a
+  thin, flow-agnostic bridge between the local Microsoft 365 Agents
+  Playground and the hosted chat endpoint. The Agents SDK supplies the
+  native `/api/messages` binding (`CloudAdapter` + `start_agent_process`);
+  each inbound message activity becomes one **bare** `/responses` turn
+  (`{model, input}` — no `previous_response_id`/`conversation_id`, since
+  chat-mode continuity lives in the server's in-process conversation) and
+  the assistant text is relayed back. Turns are serialized per conversation
+  so a message arriving mid-run cannot collide with the in-flight turn;
+  auth is anonymous (local Playground only — tenant sideload is out of
+  scope). The flow is selected on the server via `HOSTED_AGENT_MODE`, so
+  the bridge itself is flow-agnostic.
 - **Observability** — the hosting SDK's OTel distro owns the
   `TracerProvider`, driven by `OTEL_EXPORTER_OTLP_ENDPOINT`;
   `usage.py` adds per-stage token accounting. Local viewing: either the
@@ -73,6 +88,7 @@ src/foundry_agent/
 ├── workflow_functional.py      # Flow 2 (functional API): same flow + deterministic validate.py gate loop
 ├── chat_agent.py               # drives the workflow over chat turns; per-turn checkpoints + restart resume
 ├── chat_agent_functional.py    # serves Flow 2 as a DevUI chat (pauses as text); in-memory, no checkpoints
+├── teams_bridge.py             # dev tooling: Teams bridge (/api/messages → bare /responses turns)
 ├── agents.py                   # 4 agents, skill packs + skill mounts, client factory, script runner
 ├── prompts.py                  # everything the agents are told: instructions, packs, per-turn clauses
 ├── usage.py                    # per-stage token accounting + OTel span annotation
@@ -91,10 +107,14 @@ to the local one:
 | --- | --- |
 | `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME` | Model access (resource **root** URL; see README notes) |
 | `AZURE_OPENAI_API_KEY` | Optional; absent → `DefaultAzureCredential` (the hosted managed-identity path) |
-| `HOSTED_AGENT_MODE` | `workflow` (default, machine clients) or `chat` (playground-style clients) |
+| `HOSTED_AGENT_MODE` | `workflow` (default, machine clients), `chat` (Flow 1, playground-style clients), or `chat-functional` (Flow 2 as a chat agent; in-memory, no restart resume) |
 | `CHAT_CHECKPOINT_STORAGE_PATH` | Chat-mode checkpoint root (default `.checkpoints/chat/`) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Where the hosting SDK's OTel distro exports (platform-injected in prod) |
 | `SKILL_SCRIPT_TIMEOUT_SECONDS` | Wall-clock cap on one skill-script subprocess (default 30) |
+| `WORKFLOW_RESPONSES_URL` | Teams bridge → hosted chat endpoint (default `http://localhost:8088/responses`) |
+| `WORKFLOW_MODEL_NAME` | `model` label the bridge sends each turn (default `report-interview-agent`) |
+| `WORKFLOW_RESPONSES_TIMEOUT_SECONDS` | Bridge per-turn **read** timeout (default 600; a turn runs model calls) |
+| `TEAMS_BRIDGE_PORT` | Port the bridge's `/api/messages` listens on (default 3978) |
 
 Non-secret hosted config rides in `hosted.env` (loaded by root `main.py`);
 secrets stay in the git-ignored `.env`.

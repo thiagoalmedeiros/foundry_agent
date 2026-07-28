@@ -1277,7 +1277,11 @@ dependencies = [
     { name = "agent-framework" },
     { name = "agent-framework-devui" },
     { name = "agent-framework-foundry-hosting" },
+    { name = "aiohttp" },
     { name = "azure-identity" },
+    { name = "httpx" },
+    { name = "microsoft-agents-hosting-aiohttp" },
+    { name = "microsoft-agents-hosting-core" },
     { name = "openai" },
     { name = "pydantic" },
     { name = "python-dotenv" },
@@ -1295,7 +1299,11 @@ requires-dist = [
     { name = "agent-framework" },
     { name = "agent-framework-devui", specifier = ">=1.0.0b260721" },
     { name = "agent-framework-foundry-hosting", specifier = ">=1.0.0b260721" },
+    { name = "aiohttp", specifier = ">=3.11" },
     { name = "azure-identity", specifier = ">=1.19" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "microsoft-agents-hosting-aiohttp", specifier = "==0.3.1" },
+    { name = "microsoft-agents-hosting-core", specifier = "==0.3.1" },
     { name = "openai", specifier = ">=2.45" },
     { name = "pydantic", specifier = "~=2.13" },
     { name = "python-dotenv", specifier = "~=1.2" },
@@ -2047,6 +2055,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e9/a5/2381ffd14d6a584f9f7ab80c7b6c634f658ea651b38702eb403c930d8396/microsoft_agents_copilotstudio_client-0.3.1.tar.gz", hash = "sha256:c529209241c9d11b7a6e8696f96a3d43121c10b49e44f00e5066f9cf5256f4f3", size = 5024, upload-time = "2025-09-09T23:19:44.833Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/97/35/8b4e9c691f2ce89653007f358519bbadff1fe0d495c3723c9dbbfa962a33/microsoft_agents_copilotstudio_client-0.3.1-py3-none-any.whl", hash = "sha256:cac7485405325b990202452c9c14848cbdb25d13e6cdaf7bd3eca3a5c1fb3989", size = 7420, upload-time = "2025-09-09T23:19:52.287Z" },
+]
+
+[[package]]
+name = "microsoft-agents-hosting-aiohttp"
+version = "0.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "microsoft-agents-hosting-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9c/bc/2cd0898560cf602adc7a43e39f54c79bc0be1e728dfbacce7d94d1f4a26c/microsoft_agents_hosting_aiohttp-0.3.1.tar.gz", hash = "sha256:f8a0badc6fd4a2b61ef218af8fd0fa29d16c805591e314abef95921d21d603a2", size = 9118, upload-time = "2025-09-09T23:19:45.836Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/98/81ac61d7a33da74e6aed0fb9172db03e3d902661e5a64ca78fbfc81ec557/microsoft_agents_hosting_aiohttp-0.3.1-py3-none-any.whl", hash = "sha256:6c22b58b74ea8427d0622bc39cae61773e3dda85caee40560bafe5d6add24e3f", size = 12708, upload-time = "2025-09-09T23:19:53.025Z" },
 ]
 
 [[package]]

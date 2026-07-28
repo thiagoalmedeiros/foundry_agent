@@ -41,6 +41,23 @@ dependencies = [
     "pydantic~=2.13",
     # .env loading (Agent Framework does not load .env automatically)
     "python-dotenv~=1.2",
+    # Teams-bridge serving path (src/foundry_agent/teams_bridge.py): the Microsoft
+    # 365 Agents SDK supplies the native /api/messages web binding + Activity protocol
+    # the local Agents Playground drives, so the bridge is not hand-rolled plumbing.
+    # Pinned ==0.3.1 to match the already-installed -core: hosting-aiohttp 0.3.1
+    # hard-pins -core==0.3.1, and both are beta 0.x with tight inter-package version
+    # coupling, so an exact pin avoids a surprise -core upgrade rippling through.
+    "microsoft-agents-hosting-aiohttp==0.3.1",
+    "microsoft-agents-hosting-core==0.3.1",
+    # Async HTTP client the bridge uses to POST bare turns to the hosted /responses
+    # endpoint. Declared directly (not leaned on as openai's transitive edge) because
+    # teams_bridge imports it — mirrors the azure-identity rationale above.
+    "httpx>=0.28",
+    # The web server teams_bridge builds /api/messages on. Same rationale: the module
+    # imports aiohttp.web directly, so it is declared directly rather than relying on
+    # microsoft-agents-hosting-aiohttp's transitive edge — a beta 0.x package that
+    # could change web framework in a minor release.
+    "aiohttp>=3.11",
 ]
 
 [tool.uv]

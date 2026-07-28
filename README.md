@@ -106,6 +106,14 @@ Two entrypoints, deliberately distinct:
   interactively. Not the production path; nothing production depends on it.
   Run `python -m foundry_agent.main --functional` to serve **Flow 2** (the
   functional hybrid workflow) instead of the default graph workflow.
+- **Dev tooling only — Teams bridge**
+  ([`teams_bridge.py`](src/foundry_agent/teams_bridge.py), `task teams:bridge`):
+  a thin, flow-agnostic bridge that lets the local Microsoft 365 Agents
+  Playground drive the workflow from a Teams-shaped chat. It forwards each
+  inbound message as one bare turn to a running chat-mode `/responses` server
+  and relays the assistant text back — the flow is chosen on the *server*
+  (`HOSTED_AGENT_MODE`), not in the bridge. See **Drive the workflow from
+  Teams** below.
 
 ## Layout
 
@@ -123,7 +131,7 @@ src/foundry_agent/
 ├── workflow_functional.py      # Flow 2 (functional API): same flow + deterministic validate.py gate loop
 ├── chat_agent.py               # drives the workflow over chat turns; per-turn checkpoints + restart resume
 ├── chat_agent_functional.py    # serves Flow 2 as a DevUI chat (pauses as text); in-memory, no checkpoints
-
+├── teams_bridge.py             # dev tooling: Teams ↔ workflow bridge (/api/messages → /responses)
 ├── agents.py                   # 4 agents, skill packs + skill mounts, client factory, script runner
 ├── prompts.py                  # everything the agents are told: instructions, packs, per-turn clauses
 ├── usage.py                    # per-stage token accounting + OTel span annotation
@@ -160,6 +168,74 @@ task devui                      # full workflow in DevUI on :8090 (real model ca
 task test                       # offline test suite (stubbed chat clients)
 task lint                       # ruff
 ```
+
+## Drive the workflow from Teams (local Agents Playground)
+
+A worked example of consuming this workflow from a Teams-shaped client. It
+needs **two processes**: the chat-mode workflow server, and the bridge.
+
+```bash
+# 1. The workflow, in a chat mode (pick the flow HERE — the bridge is agnostic):
+HOSTED_AGENT_MODE=chat task hosted:run             # Flow 1 (graph + validation agent)
+HOSTED_AGENT_MODE=chat-functional task hosted:run  # Flow 2 (deterministic script gate)
+
+# 2. The bridge, in a second terminal:
+task teams:bridge                                  # /api/messages on :3978
+```
+
+Then start the [Microsoft 365 Agents
+Playground](https://learn.microsoft.com/microsoftteams/platform/toolkit/debug-your-teams-app-test-tool)
+— a Teams-like chat UI that needs no tenant, no Azure Bot registration and no
+tunnel. It requires Node, and `npx` fetches it on demand:
+
+```bash
+npx -y @microsoft/m365agentsplayground     # UI on :56150, opens a browser
+```
+
+Its default application endpoint is already `http://localhost:3978/api/messages`
+— exactly where the bridge listens — so no configuration is needed. Override
+with `--app-endpoint <url>` / `--port <n>` if you moved either.
+
+Now chat: describe an incident, answer each elicitation question, and the
+assembled document comes back in the Teams client. A turn runs real model calls,
+so replies take roughly 30s–2min; the bridge answers "still working" if you send
+another message mid-turn. Because chat-mode continuity lives in the running
+server, **restarting `hosted:run` restarts the interview**.
+
+### From VS Code (one F5)
+
+Run and Debug offers exactly two entries — one per workflow — and each starts
+all three processes together:
+
+| Entry | Serves |
+| --- | --- |
+| **Flow 1 — Teams Playground** | graph API + validation agent (`HOSTED_AGENT_MODE=chat`) |
+| **Flow 2 — Teams Playground** | functional API + deterministic `validate.py` gate (`chat-functional`) |
+
+Breakpoints work in `teams_bridge.py` and throughout the workflow; stopping the
+session stops all three processes. The other configurations in
+[`.vscode/launch.json`](.vscode/launch.json) (DevUI, the raw workflow graph, the
+Foundry Toolkit visualizer) still exist and still run — they are just marked
+`"presentation": { "hidden": true }` to keep the list to two. Delete that line
+from any of them to bring it back.
+
+How it works — and why it is this simple:
+
+- Each inbound message becomes one **bare** `/responses` turn
+  (`{model, input}` — never `previous_response_id` / `conversation_id`).
+  Chat-mode continuity lives in the server's in-process conversation, so
+  chaining response ids would replay stored history into the elicitation
+  answer and corrupt turn 2.
+- Turns are **serialized per conversation**: a message sent while the previous
+  turn is still running gets a "still working" reply instead of colliding with
+  the in-flight run.
+- Auth is **anonymous** — the local Playground sends no bearer token.
+
+**Out of scope (deliberately):** sideloading into a real Teams *tenant* — app
+manifest, Azure Bot registration, Dev Tunnel, and Entra auth are all absent.
+The bridge is a local learning example, not a deployable Teams app. Concurrent
+multi-user conversations are out of scope too: chat mode keys everything to one
+`"default"` conversation, so one running server serves one interview at a time.
 
 ## Local deploy simulation
 
