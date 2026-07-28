@@ -42,6 +42,7 @@ with no change here.
 
 import logging
 import os
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from agent_framework import (
@@ -206,6 +207,113 @@ def _closed_values(turn: ConversationTurn) -> dict[str, str]:
     }
 
 
+def _groups_owning(
+    failing: list[str], groups: list[FieldGroup]
+) -> list[tuple[int, FieldGroup]]:
+    """The ``(index, group)`` pairs whose attributes include a failing id."""
+    wanted = set(failing)
+    return [
+        (index, group) for index, group in enumerate(groups) if wanted & set(group.attribute_ids)
+    ]
+
+
+class _Interview:
+    """One run of the Flow 2 interview: elicit → gate → narrow, until the script passes.
+
+    Holds the per-run state the orchestration mutates — the authoritative
+    ``{attribute_id: value}`` map and the base content it renders from — so the
+    loop reads as plain steps over named state instead of closure variables.
+    The workflow stages arrive as callables because they are ``@step``-decorated
+    closures over the run's agents; this class only sequences them.
+
+    A **fresh instance per run** is required: the functional API replays the
+    workflow body from the top on every resume, and the replay must rebuild
+    ``captured`` from the (cached) step results rather than inherit a previous
+    run's values.
+
+    Args:
+        discovery_step: Resolves the interview's field groups.
+        run_group: Clarifies one group to completion, returning what it settled.
+        assemble_step: Authors the final document from the rendered content.
+        max_cycles: Hard cap on validation→re-elicitation cycles.
+    """
+
+    def __init__(
+        self,
+        *,
+        discovery_step: Callable[[], Awaitable[FieldGroups]],
+        run_group: Callable[..., Awaitable[dict[str, str]]],
+        assemble_step: Callable[[str], Awaitable[str]],
+        max_cycles: int,
+    ) -> None:
+        self._discovery_step = discovery_step
+        self._run_group = run_group
+        self._assemble_step = assemble_step
+        self._max_cycles = max_cycles
+        self._base_content = ""
+        #: The authoritative {attribute_id: value} map — the deterministic gate's
+        #: input, and what content is rendered from (never parsed back out of it).
+        self._captured: dict[str, str] = {}
+
+    async def run(self, message: object) -> str:
+        """Walk every group, gate on the skill's script, re-elicit until it passes.
+
+        One loop covers the whole interview: cycle 0 opens *every* group, then the
+        skill's script gates and each later cycle re-opens *only* the groups owning
+        an attribute it still reports missing. The cap is the harness's termination
+        guarantee — a field the user never resolves banks into the appendix instead
+        of looping forever.
+
+        Args:
+            message: The caller's initial input (already normalized to text).
+
+        Returns:
+            The assembled document, plus a residual-gap appendix when the gate
+            never passed.
+        """
+        self._base_content = _cap_input(_as_text(message), where="initial input")
+        groups = (await self._discovery_step()).groups
+
+        targets = list(enumerate(groups))
+        cycle = 0
+        while True:
+            await self._elicit(targets, cycle=cycle)
+            failing = await run_validation_gate(self._captured, groups)
+            if not failing or cycle >= self._max_cycles:
+                break
+            cycle += 1
+            targets = _groups_owning(failing, groups)
+            logger.info(
+                "gate cycle %d/%d: re-eliciting %d group(s) for missing %s",
+                cycle,
+                self._max_cycles,
+                len(targets),
+                ", ".join(failing),
+            )
+        if failing:
+            logger.info(
+                "gate still failing after %d cycle(s); banking %s to the appendix",
+                self._max_cycles,
+                ", ".join(failing),
+            )
+
+        document = await self._assemble_step(self._render())
+        appendix = build_appendix(failing, findings=[])
+        return f"{document}{appendix}" if appendix else document
+
+    async def _elicit(self, targets: list[tuple[int, FieldGroup]], *, cycle: int) -> None:
+        """Clarify each target group, folding what it settles into the capture map."""
+        for group_index, group in targets:
+            # Re-rendered per group because the map just grew: content is always
+            # rebuilt from it, never appended to (see _render_content).
+            captured = await self._run_group(group, group_index, self._render(), cycle=cycle)
+            self._captured.update(captured)
+
+    def _render(self) -> str:
+        """The interview content as of the current capture map."""
+        return _render_content(self._base_content, self._captured)
+
+
 def build_hybrid_workflow(
     *,
     elicitation_agent: Agent,
@@ -337,15 +445,6 @@ def build_hybrid_workflow(
             turn_index += 1
         return _closed_values(result.turn)
 
-    def _groups_owning(failing: list[str], groups: list[FieldGroup]) -> list[tuple[int, FieldGroup]]:
-        """The ``(index, group)`` pairs whose attributes include a failing id."""
-        wanted = set(failing)
-        return [
-            (index, group)
-            for index, group in enumerate(groups)
-            if wanted & set(group.attribute_ids)
-        ]
-
     @workflow(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
     async def hybrid_report_workflow(message: object) -> str:
         """Walk every group, gate on the skill's script, re-elicit until it passes.
@@ -355,46 +454,18 @@ def build_hybrid_workflow(
         normalizes both. No ``ctx`` parameter is needed here: the human-in-the-loop
         pauses live inside :func:`ask_continue_step`, which reaches the active
         context through :func:`get_run_context`.
+
+        The orchestration itself lives in :class:`_Interview`; this body only binds
+        this build's stages to a **fresh** instance, because the functional API
+        replays it from the top on every resume and each replay must rebuild the
+        capture map from the cached step results.
         """
-        base_content = _cap_input(_as_text(message), where="initial input")
-        groups = (await discovery_step()).groups
-        # The authoritative {attribute_id: value} map — the deterministic gate's
-        # input, and what the content is rendered from (never parsed back out of it).
-        captured: dict[str, str] = {}
-        for group_index, group in enumerate(groups):
-            content = _render_content(base_content, captured)
-            captured.update(await run_group(group, group_index, content, cycle=0))
-
-        # Deterministic gate loop: run the skill's script, and while it reports
-        # required attributes still missing, re-open only the groups that own them.
-        # The cycle cap is the harness's own termination guarantee — a field the
-        # user never resolves banks into the appendix instead of looping forever.
-        failing = await run_validation_gate(captured, groups)
-        cycle = 0
-        while failing and cycle < max_cycles:
-            cycle += 1
-            targets = _groups_owning(failing, groups)
-            logger.info(
-                "gate cycle %d/%d: re-eliciting %d group(s) for missing %s",
-                cycle,
-                max_cycles,
-                len(targets),
-                ", ".join(failing),
-            )
-            for group_index, group in targets:
-                content = _render_content(base_content, captured)
-                captured.update(await run_group(group, group_index, content, cycle=cycle))
-            failing = await run_validation_gate(captured, groups)
-        if failing:
-            logger.info(
-                "gate still failing after %d cycle(s); banking %s to the appendix",
-                max_cycles,
-                ", ".join(failing),
-            )
-
-        document = await assemble_step(_render_content(base_content, captured))
-        appendix = build_appendix(failing, [])
-        return f"{document}{appendix}" if appendix else document
+        return await _Interview(
+            discovery_step=discovery_step,
+            run_group=run_group,
+            assemble_step=assemble_step,
+            max_cycles=max_cycles,
+        ).run(message)
 
     return hybrid_report_workflow
 
